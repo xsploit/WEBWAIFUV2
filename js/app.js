@@ -334,6 +334,13 @@ async function saveMemory(text, role, metadata = {}) {
 
     try {
         const embedding = await generateEmbedding(text);
+        
+        // Validate embedding before saving
+        if (!embedding || !Array.isArray(embedding) || embedding.length === 0) {
+            console.warn('⚠️ Invalid embedding generated, skipping memory save. Models may still be loading.');
+            return;
+        }
+        
         const classification = role === 'user' ? await classifyMessage(text) : { importance: 5, category: 'response', sentiment: 'NEUTRAL' };
 
         const memory = {
@@ -387,8 +394,19 @@ async function retrieveRelevantMemories(query, topK = 3) {
                     return;
                 }
 
+                // Filter out memories with invalid embeddings
+                const validMemories = memories.filter(mem => 
+                    mem.embedding && Array.isArray(mem.embedding) && mem.embedding.length > 0
+                );
+                
+                if (validMemories.length === 0) {
+                    console.warn('⚠️ No valid memories found (all have null embeddings)');
+                    resolve([]);
+                    return;
+                }
+
                 // Calculate similarities
-                const scored = memories.map(mem => ({
+                const scored = validMemories.map(mem => ({
                     ...mem,
                     similarity: cosineSimilarity(queryEmbedding, mem.embedding)
                 }));
@@ -413,6 +431,17 @@ async function retrieveRelevantMemories(query, topK = 3) {
 
 // Cosine similarity calculation
 function cosineSimilarity(vecA, vecB) {
+    // Safety checks for null/undefined embeddings
+    if (!vecA || !vecB || vecA.length === 0 || vecB.length === 0) {
+        console.warn('⚠️ Null or empty embedding in similarity calculation');
+        return 0;
+    }
+    
+    if (vecA.length !== vecB.length) {
+        console.warn('⚠️ Embedding dimension mismatch:', vecA.length, 'vs', vecB.length);
+        return 0;
+    }
+    
     let dotProduct = 0;
     let normA = 0;
     let normB = 0;

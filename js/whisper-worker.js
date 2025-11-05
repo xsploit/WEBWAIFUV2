@@ -12,16 +12,12 @@ async function loadTransformers() {
     pipeline = module.pipeline;
     env = module.env;
     
-    // Configure Transformers.js to use jsdelivr CDN (Whisper models are too big for local)
-    env.allowRemoteModels = true;  // Use CDN for Whisper
-    env.allowLocalModels = false;  // Whisper models are huge, don't use local
-    env.remoteHost = 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/';
-    env.remotePathTemplate = '{model}/onnx/{file}';
+    // Configure for Whisper from CDN (Whisper models are ~40MB, too big for Git LFS)
+    env.allowRemoteModels = true;
+    env.allowLocalModels = false;
+    // Don't set custom remotePathTemplate - use default jsdelivr paths
     
-    console.log('🔧 [Worker] Transformers.js configured for CDN:', {
-      allowRemoteModels: env.allowRemoteModels,
-      remoteHost: env.remoteHost
-    });
+    console.log('🔧 [Worker] Transformers.js CDN configured for Whisper');
     
     return true;
   } catch (error) {

@@ -1,0 +1,10 @@
+# Git Large File Storage (LFS) for model files
+# Install: git lfs install
+# Track: Files over 100MB need LFS for GitHub
+
+# Track large ONNX model files (250MB classifier)
+public/models/**/*.onnx filter=lfs diff=lfs merge=lfs -text
+
+# Also track other large binary files if needed
+*.bin filter=lfs diff=lfs merge=lfs -text
+

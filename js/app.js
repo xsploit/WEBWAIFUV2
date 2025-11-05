@@ -14,14 +14,18 @@ import { loadMixamoAnimation } from './loadMixamoAnimation.js';
 import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
 
 // =============================================
-// TRANSFORMERS.JS CONFIGURATION (Fix for Netlify)
+// TRANSFORMERS.JS CONFIGURATION - USE LOCAL MODELS
 // =============================================
-// Use jsdelivr CDN instead of Hugging Face (more reliable for Netlify)
-env.useBrowserCache = true;  // Cache models in browser's IndexedDB
-env.allowRemoteModels = true;  // Allow downloading models from CDN
-env.allowLocalModels = false;  // Use CDN, not local files
+// Configure to use locally hosted models (fixes Netlify CDN issues)
+env.allowRemoteModels = false;  // Don't use Hugging Face CDN
+env.allowLocalModels = true;    // Use local files
+env.localModelPath = '/public/models/';  // Path to local models
 
-console.log('🔧 Transformers.js configured for jsdelivr CDN');
+console.log('🔧 Transformers.js configured for LOCAL models:', {
+    allowRemoteModels: env.allowRemoteModels,
+    allowLocalModels: env.allowLocalModels,
+    localModelPath: env.localModelPath
+});
 
 // =============================================
 // PHONEME TO VRM BLEND SHAPE MAPPING
@@ -537,13 +541,13 @@ async function initWhisperWorker() {
     });
 }
 
-// Load Embedding Model (MiniLM)
+// Load Embedding Model (MiniLM) - FROM LOCAL FILES
 async function loadEmbeddingModel() {
     try {
         updateSplashModelStatus('splashEmbedding', 'loading', 20);
 
-        // Use jsdelivr CDN as fallback (more reliable than Hugging Face)
-        APP_STATE.embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
+        // Use locally hosted models (downloaded via download_models.py)
+        APP_STATE.embedder = await pipeline('feature-extraction', 'embedding', {
             progress_callback: (progress) => {
                 if (progress.status === 'progress') {
                     const percent = Math.round((progress.loaded / progress.total) * 100);
@@ -553,7 +557,7 @@ async function loadEmbeddingModel() {
         });
 
         updateSplashModelStatus('splashEmbedding', 'loaded', 100);
-        console.log('✅ Embedding model loaded');
+        console.log('✅ Embedding model loaded (LOCAL)');
         return true;
     } catch (error) {
         updateSplashModelStatus('splashEmbedding', 'error', 0);
@@ -563,12 +567,13 @@ async function loadEmbeddingModel() {
     }
 }
 
-// Load Classifier Model (DistilBERT)
+// Load Classifier Model (DistilBERT) - FROM LOCAL FILES (OPTIONAL)
 async function loadClassifierModel() {
     try {
         updateSplashModelStatus('splashClassifier', 'loading', 20);
 
-        APP_STATE.classifier = await pipeline('text-classification', 'Xenova/distilbert-base-uncased-finetuned-sst-2-english', {
+        // Use locally hosted models (optional - 250MB, may not be pushed to GitHub)
+        APP_STATE.classifier = await pipeline('text-classification', 'classifier', {
             progress_callback: (progress) => {
                 if (progress.status === 'progress') {
                     const percent = Math.round((progress.loaded / progress.total) * 100);
@@ -578,13 +583,13 @@ async function loadClassifierModel() {
         });
 
         updateSplashModelStatus('splashClassifier', 'loaded', 100);
-        console.log('✅ Classifier model loaded');
+        console.log('✅ Classifier model loaded (LOCAL)');
         return true;
     } catch (error) {
         updateSplashModelStatus('splashClassifier', 'error', 0);
-        console.error('❌ Classifier model failed to load:', error);
+        console.warn('⚠️ Classifier model not available (emotion detection disabled):', error.message);
         APP_STATE.classifier = null;
-        return false;
+        return false;  // Not critical - app works without classifier
     }
 }
 

@@ -63,3 +63,9 @@ netlify-functions/
 .netlify/state.json
 .netlify/functions-serve/
 
+# Transformers.js models (OPTIONAL - only if NOT using Git LFS)
+# Uncomment the classifier line if you skipped downloading it (250MB)
+# public/models/classifier/
+
+# Download script output
+download_models.py

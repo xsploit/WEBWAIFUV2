@@ -1834,8 +1834,8 @@ function updateLipSync() {
         return;
     }
     
-    // If not speaking, close mouth
-    if (!APP_STATE.isSpeaking || !APP_STATE.wordBoundaries || APP_STATE.wordBoundaries.length === 0) {
+    // If not speaking, close mouth (allow empty wordBoundaries for Fish Audio amplitude mode)
+    if (!APP_STATE.isSpeaking || !APP_STATE.wordBoundaries) {
         if (manager.getExpression('aa')) manager.setValue('aa', 0);
         if (manager.getExpression('ih')) manager.setValue('ih', 0);
         if (manager.getExpression('ou')) manager.setValue('ou', 0);

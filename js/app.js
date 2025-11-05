@@ -1503,6 +1503,10 @@ async function synthesizeFishAudioChunk(text) {
         });
         
         if (!response.ok) {
+            // Check if it's a 404 (Netlify function not available)
+            if (response.status === 404) {
+                throw new Error('Fish Audio TTS only works on deployed Netlify site. Use Edge TTS for local development.');
+            }
             const errorText = await response.text();
             throw new Error(`Fish Audio API error (${response.status}): ${errorText}`);
         }
@@ -1521,6 +1525,10 @@ async function synthesizeFishAudioChunk(text) {
         };
     } catch (error) {
         console.error('❌ Fish Audio synthesis error:', error);
+        // Show user-friendly message if running locally
+        if (error.message.includes('only works on deployed')) {
+            alert('⚠️ Fish Audio TTS requires Netlify deployment.\n\nSwitch to Edge TTS for local development, or run with "netlify dev".');
+        }
         throw error;
     }
 }
@@ -4146,31 +4154,46 @@ async function fetchFishAudioModels(apiKey) {
     try {
         showStatus('🔄 Loading Fish Audio voices...', 'loading');
         
-        // Use Netlify function instead of direct API call
-        const response = await fetch('/.netlify/functions/fish-models', {
-            headers: { 
-                'x-fish-api-key': apiKey 
+        // Try Netlify function first
+        try {
+            const response = await fetch('/.netlify/functions/fish-models', {
+                headers: { 
+                    'x-fish-api-key': apiKey 
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Failed to fetch Fish models: ${response.status}`);
             }
-        });
-        
-        if (!response.ok) {
-            throw new Error(`Failed to fetch Fish models: ${response.status}`);
+            
+            const data = await response.json();
+            
+            // Extract model IDs and names
+            const models = data.items ? data.items.map(m => ({
+                id: m._id || m.id,
+                name: m.title || m.name || m.id
+            })) : [];
+            
+            console.log('🐟 Fish Audio models loaded:', models.length, 'voices');
+            TTS_PROVIDERS.fish.models = models;
+            updateFishModelOptions();
+            
+            showStatus(`✅ Loaded ${models.length} Fish Audio voices`, 'success');
+            return models;
+        } catch (netlifyError) {
+            // Netlify function not available (local dev without netlify dev)
+            console.warn('⚠️ Netlify function not available (running locally?)');
+            console.log('💡 Fish Audio TTS will only work on deployed Netlify site');
+            showStatus('⚠️ Fish Audio only available on deployed site', 'warning');
+            
+            // Set placeholder for local dev
+            TTS_PROVIDERS.fish.models = [{
+                id: '',
+                name: '(Deploy to Netlify to use Fish Audio)'
+            }];
+            updateFishModelOptions();
+            return [];
         }
-        
-        const data = await response.json();
-        
-        // Extract model IDs and names
-        const models = data.items ? data.items.map(m => ({
-            id: m._id || m.id,
-            name: m.title || m.name || m.id
-        })) : [];
-        
-        console.log('🐟 Fish Audio models loaded:', models.length, 'voices');
-        TTS_PROVIDERS.fish.models = models;
-        updateFishModelOptions();
-        
-        showStatus(`✅ Loaded ${models.length} Fish Audio voices`, 'success');
-        return models;
     } catch (error) {
         console.error('❌ Failed to fetch Fish Audio models:', error);
         showStatus('❌ Failed to load Fish Audio voices', 'error');

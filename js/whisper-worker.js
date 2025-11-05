@@ -4,11 +4,25 @@
 // Import Transformers.js in worker context using dynamic import
 // Since workers don't support ES6 modules directly, we'll use dynamic import
 let pipeline = null;
+let env = null;
 
 async function loadTransformers() {
   try {
-    const module = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1');
+    const module = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
     pipeline = module.pipeline;
+    env = module.env;
+    
+    // Configure Transformers.js to use jsdelivr CDN (Whisper models are too big for local)
+    env.allowRemoteModels = true;  // Use CDN for Whisper
+    env.allowLocalModels = false;  // Whisper models are huge, don't use local
+    env.remoteHost = 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/';
+    env.remotePathTemplate = '{model}/onnx/{file}';
+    
+    console.log('🔧 [Worker] Transformers.js configured for CDN:', {
+      allowRemoteModels: env.allowRemoteModels,
+      remoteHost: env.remoteHost
+    });
+    
     return true;
   } catch (error) {
     console.error('[Worker] Failed to load Transformers.js:', error);

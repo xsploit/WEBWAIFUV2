@@ -193,6 +193,7 @@ const APP_STATE = {
             // Fish Audio Settings
             fishApiKey: localStorage.getItem('fishApiKey') || '',
             fishVoiceId: localStorage.getItem('fishVoiceId') || '',
+            fishCustomModelId: localStorage.getItem('fishCustomModelId') || '',
             
             // VRM Settings
             currentVrmPath: getSafeVrmPath(),
@@ -3319,8 +3320,7 @@ function setupTTSControls() {
         fishCustomModelId.value = APP_STATE.settings.fishCustomModelId || '';
         fishCustomModelId.addEventListener('input', (e) => {
             const customId = e.target.value.trim();
-            saveSetting('fishCustomModelId', customId);
-            APP_STATE.settings.fishCustomModelId = customId;
+            saveSetting('fishCustomModelId', customId); // Saves to both APP_STATE.settings AND localStorage
             if (customId) {
                 showStatus('✅ Custom Fish Audio model ID set', 'success');
             }

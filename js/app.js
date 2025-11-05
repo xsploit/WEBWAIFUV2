@@ -1502,9 +1502,20 @@ async function synthesizeFishAudioChunk(text) {
     // Use Netlify function (works locally via netlify dev and in production)
     const url = '/.netlify/functions/fish-tts';
     
+    // Priority: Custom Model ID > Dropdown Selection
+    const modelId = APP_STATE.settings.fishCustomModelId || APP_STATE.settings.fishVoiceId || null;
+    
+    if (APP_STATE.settings.fishCustomModelId) {
+        console.log(`🐟 Using CUSTOM model ID: ${modelId}`);
+    } else if (APP_STATE.settings.fishVoiceId) {
+        console.log(`🐟 Using dropdown model ID: ${modelId}`);
+    } else {
+        console.log('🐟 No model ID specified (using default voice)');
+    }
+    
     const requestBody = {
         text: text,
-        reference_id: APP_STATE.settings.fishVoiceId || null,
+        reference_id: modelId,
         
         // Speed optimizations
         latency: "balanced",    // Faster synthesis mode
@@ -3302,6 +3313,20 @@ function setupTTSControls() {
         });
     }
     
+    // Fish Custom Model ID (overrides dropdown)
+    const fishCustomModelId = document.getElementById('fishCustomModelId');
+    if (fishCustomModelId) {
+        fishCustomModelId.value = APP_STATE.settings.fishCustomModelId || '';
+        fishCustomModelId.addEventListener('input', (e) => {
+            const customId = e.target.value.trim();
+            saveSetting('fishCustomModelId', customId);
+            APP_STATE.settings.fishCustomModelId = customId;
+            if (customId) {
+                showStatus('✅ Custom Fish Audio model ID set', 'success');
+            }
+        });
+    }
+    
     // Test Fish TTS button
     const testFishTtsBtn = document.getElementById('testFishTtsBtn');
     if (testFishTtsBtn) {
@@ -3310,8 +3335,8 @@ function setupTTSControls() {
                 showStatus('❌ Please enter Fish Audio API key', 'error');
                 return;
             }
-            if (!APP_STATE.settings.fishVoiceId) {
-                showStatus('❌ Please select a voice', 'error');
+            if (!APP_STATE.settings.fishVoiceId && !APP_STATE.settings.fishCustomModelId) {
+                showStatus('❌ Please select a voice or enter custom model ID', 'error');
                 return;
             }
             

@@ -541,23 +541,40 @@ async function initWhisperWorker() {
     });
 }
 
-// Load Embedding Model (MiniLM) - FROM LOCAL FILES
+// Load Embedding Model (MiniLM) - WITH CDN FALLBACK
 async function loadEmbeddingModel() {
     try {
         updateSplashModelStatus('splashEmbedding', 'loading', 20);
 
-        // Use locally hosted models (downloaded via download_models.py)
-        APP_STATE.embedder = await pipeline('feature-extraction', 'embedding', {
-            progress_callback: (progress) => {
-                if (progress.status === 'progress') {
-                    const percent = Math.round((progress.loaded / progress.total) * 100);
-                    updateSplashModelStatus('splashEmbedding', 'loading', percent);
+        // Try local first, fall back to CDN if it fails
+        try {
+            console.log('🔄 Trying LOCAL embedding model...');
+            APP_STATE.embedder = await pipeline('feature-extraction', 'embedding', {
+                progress_callback: (progress) => {
+                    if (progress.status === 'progress') {
+                        const percent = Math.round((progress.loaded / progress.total) * 100);
+                        updateSplashModelStatus('splashEmbedding', 'loading', percent);
+                    }
                 }
-            }
-        });
+            });
+            console.log('✅ Embedding model loaded (LOCAL)');
+        } catch (localError) {
+            console.warn('⚠️ Local model failed, trying CDN...', localError.message);
+            // Fall back to CDN
+            env.allowRemoteModels = true;
+            env.allowLocalModels = false;
+            APP_STATE.embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
+                progress_callback: (progress) => {
+                    if (progress.status === 'progress') {
+                        const percent = Math.round((progress.loaded / progress.total) * 100);
+                        updateSplashModelStatus('splashEmbedding', 'loading', percent);
+                    }
+                }
+            });
+            console.log('✅ Embedding model loaded (CDN FALLBACK)');
+        }
 
         updateSplashModelStatus('splashEmbedding', 'loaded', 100);
-        console.log('✅ Embedding model loaded (LOCAL)');
         return true;
     } catch (error) {
         updateSplashModelStatus('splashEmbedding', 'error', 0);
@@ -567,23 +584,40 @@ async function loadEmbeddingModel() {
     }
 }
 
-// Load Classifier Model (DistilBERT) - FROM LOCAL FILES (OPTIONAL)
+// Load Classifier Model (DistilBERT) - WITH CDN FALLBACK (OPTIONAL)
 async function loadClassifierModel() {
     try {
         updateSplashModelStatus('splashClassifier', 'loading', 20);
 
-        // Use locally hosted models (optional - 250MB, may not be pushed to GitHub)
-        APP_STATE.classifier = await pipeline('text-classification', 'classifier', {
-            progress_callback: (progress) => {
-                if (progress.status === 'progress') {
-                    const percent = Math.round((progress.loaded / progress.total) * 100);
-                    updateSplashModelStatus('splashClassifier', 'loading', percent);
+        // Try local first, fall back to CDN if it fails
+        try {
+            console.log('🔄 Trying LOCAL classifier model...');
+            APP_STATE.classifier = await pipeline('text-classification', 'classifier', {
+                progress_callback: (progress) => {
+                    if (progress.status === 'progress') {
+                        const percent = Math.round((progress.loaded / progress.total) * 100);
+                        updateSplashModelStatus('splashClassifier', 'loading', percent);
+                    }
                 }
-            }
-        });
+            });
+            console.log('✅ Classifier model loaded (LOCAL)');
+        } catch (localError) {
+            console.warn('⚠️ Local classifier failed, trying CDN...', localError.message);
+            // Fall back to CDN
+            env.allowRemoteModels = true;
+            env.allowLocalModels = false;
+            APP_STATE.classifier = await pipeline('text-classification', 'Xenova/distilbert-base-uncased-finetuned-sst-2-english', {
+                progress_callback: (progress) => {
+                    if (progress.status === 'progress') {
+                        const percent = Math.round((progress.loaded / progress.total) * 100);
+                        updateSplashModelStatus('splashClassifier', 'loading', percent);
+                    }
+                }
+            });
+            console.log('✅ Classifier model loaded (CDN FALLBACK)');
+        }
 
         updateSplashModelStatus('splashClassifier', 'loaded', 100);
-        console.log('✅ Classifier model loaded (LOCAL)');
         return true;
     } catch (error) {
         updateSplashModelStatus('splashClassifier', 'error', 0);

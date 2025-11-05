@@ -200,10 +200,13 @@ const APP_STATE = {
             avatarPositionY: parseFloat(localStorage.getItem('avatarPositionY') || '-0.8'),
             avatarScale: parseFloat(localStorage.getItem('avatarScale') || '1'),
             autoSnapToFloor: localStorage.getItem('autoSnapToFloor') !== 'false', // Default enabled
+            snapToFloor: localStorage.getItem('snapToFloor') !== 'false', // Default true
             
             // Room Settings
             roomScale: parseFloat(localStorage.getItem('roomScale') || '1'),
             roomPositionY: parseFloat(localStorage.getItem('roomPositionY') || '0'),
+            showRoom: localStorage.getItem('showRoom') !== 'false', // Default true
+            showGrid: localStorage.getItem('showGrid') !== 'false', // Default true
             
             // Animation Settings
             idleAnimationPath: localStorage.getItem('idleAnimationPath') || 'assets/animations/Happy Idle.fbx',
@@ -2900,7 +2903,7 @@ function initializeUI() {
     // Snap to Floor checkbox
     const snapToFloorCheckbox = document.getElementById('snapToFloor');
     if (snapToFloorCheckbox) {
-        snapToFloorCheckbox.checked = true; // Default to checked
+        snapToFloorCheckbox.checked = APP_STATE.settings.snapToFloor;
         snapToFloorCheckbox.addEventListener('change', (e) => {
             saveSetting('snapToFloor', e.target.checked);
             if (e.target.checked) {
@@ -3898,7 +3901,8 @@ function setupBackgroundControls() {
     // Room toggle
     const showRoomCheckbox = document.getElementById('showRoom');
     if (showRoomCheckbox) {
-        showRoomCheckbox.checked = true;
+        showRoomCheckbox.checked = APP_STATE.settings.showRoom;
+        toggleRoom(APP_STATE.settings.showRoom); // Apply saved state on init
         showRoomCheckbox.addEventListener('change', (e) => {
             toggleRoom(e.target.checked);
             saveSetting('showRoom', e.target.checked);
@@ -3908,7 +3912,8 @@ function setupBackgroundControls() {
     // Grid toggle
     const showGridCheckbox = document.getElementById('showGrid');
     if (showGridCheckbox) {
-        showGridCheckbox.checked = true;
+        showGridCheckbox.checked = APP_STATE.settings.showGrid;
+        toggleGrid(APP_STATE.settings.showGrid); // Apply saved state on init
         showGridCheckbox.addEventListener('change', (e) => {
             toggleGrid(e.target.checked);
             saveSetting('showGrid', e.target.checked);

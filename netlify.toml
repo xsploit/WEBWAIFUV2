@@ -1,0 +1,28 @@
+# Netlify configuration for WEBWAIFUV2
+
+[build]
+  # No build command needed for static site
+  publish = "."
+  functions = "netlify/functions"
+
+# Redirect for SPA (if needed)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+  force = false
+
+# Headers for CORS and security
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+
+# Function-specific settings
+[functions]
+  # Increase timeout for TTS generation (default is 10s)
+  # Netlify free tier allows up to 10s, Pro allows 26s
+  node_bundler = "esbuild"
+

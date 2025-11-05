@@ -368,50 +368,116 @@
                 </div>
             </div>
 
-            <!-- Edge TTS Configuration -->
+            <!-- Text-to-Speech Configuration -->
             <div class="accordion-section">
                 <div class="accordion-header" data-target="ttsSettings">
-                    <span>🔊 Edge TTS (Text-to-Speech)</span>
+                    <span>🔊 Text-to-Speech (TTS)</span>
                     <span class="accordion-icon">▼</span>
                 </div>
                 <div class="accordion-content" id="ttsSettings">
-                    <div class="tts-info">
-                        <p>🎤 <strong>Edge TTS</strong> - High-quality neural voices</p>
-                        <p>✨ Free, no API key required!</p>
-                    </div>
-
+                    <!-- TTS Provider Selector -->
                     <div class="control-group">
-                        <label>Voice</label>
-                        <select id="ttsVoice">
-                            <option value="">Loading voices...</option>
+                        <label>🎙️ TTS Provider</label>
+                        <select id="ttsProvider" class="setting-input">
+                            <option value="edge">Edge TTS (Microsoft) - Free ✅</option>
+                            <option value="fish">Fish Audio - Voice Cloning 🐟</option>
                         </select>
                     </div>
 
-                    <div class="control-group">
-                        <label>Rate: <span class="range-value" id="ttsRateValue">0%</span></label>
-                        <input type="range" id="ttsRate" min="-50" max="100" value="0" step="10">
+                    <!-- Edge TTS Settings -->
+                    <div id="edgeTTSSettings">
+                        <div class="tts-info">
+                            <p>🎤 <strong>Edge TTS</strong> - High-quality neural voices</p>
+                            <p>✨ Free, no API key required!</p>
+                        </div>
+
+                        <div class="control-group">
+                            <label>Voice</label>
+                            <select id="ttsVoice">
+                                <option value="">Loading voices...</option>
+                            </select>
+                        </div>
+
+                        <div class="control-group">
+                            <label>Rate: <span class="range-value" id="ttsRateValue">0%</span></label>
+                            <input type="range" id="ttsRate" min="-50" max="100" value="0" step="10">
+                        </div>
+
+                        <div class="control-group">
+                            <label>Pitch: <span class="range-value" id="ttsPitchValue">0st</span></label>
+                            <input type="range" id="ttsPitch" min="-12" max="12" value="0" step="0.5">
+                        </div>
+
+                        <div class="control-group">
+                            <label>Volume: <span class="range-value" id="ttsVolumeValue">0%</span></label>
+                            <input type="range" id="ttsVolume" min="-50" max="50" value="0" step="10">
+                        </div>
+
+                        <div class="control-group">
+                            <label>
+                                <input type="checkbox" id="ttsAutoPlay" checked>
+                                Auto-play AI responses
+                            </label>
+                        </div>
+
+                        <button class="upload-btn" id="testTtsBtn" style="width: 100%; margin-top: 10px;">
+                            🔊 Test Voice
+                        </button>
                     </div>
 
-                    <div class="control-group">
-                        <label>Pitch: <span class="range-value" id="ttsPitchValue">0st</span></label>
-                        <input type="range" id="ttsPitch" min="-12" max="12" value="0" step="0.5">
-                    </div>
+                    <!-- Fish Audio Settings -->
+                    <div id="fishAudioSettings" class="hidden">
+                        <div class="tts-info" style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(16, 185, 129, 0.1)); border-left: 3px solid #3b82f6;">
+                            <p>🐟 <strong>Fish Audio</strong> - AI Voice Cloning</p>
+                            <p>💰 Paid service with custom voice models</p>
+                        </div>
 
-                    <div class="control-group">
-                        <label>Volume: <span class="range-value" id="ttsVolumeValue">0%</span></label>
-                        <input type="range" id="ttsVolume" min="-50" max="50" value="0" step="10">
-                    </div>
+                        <div class="control-group">
+                            <label>🔑 Fish Audio API Key</label>
+                            <div class="input-with-eye">
+                                <input type="password" id="fishApiKey" placeholder="sk-xxxxxxxxxxxxxxxx" style="flex: 1;">
+                                <button class="eye-btn" data-target="fishApiKey">👁️</button>
+                            </div>
+                            <div class="range-hint">Get your API key from <a href="https://fish.audio/app/api-keys" target="_blank" style="color: #3b82f6;">fish.audio/app/api-keys</a></div>
+                        </div>
+                        
+                        <div class="control-group">
+                            <label>🎤 Voice Model</label>
+                            <select id="fishVoiceId" class="setting-input">
+                                <option value="">Enter API key to load voices...</option>
+                            </select>
+                            <div class="range-hint">Your custom cloned voices will appear here</div>
+                        </div>
+                        
+                        <div class="control-group">
+                            <label>Rate: <span class="range-value" id="ttsRateValue">0%</span></label>
+                            <input type="range" id="ttsRate" min="-50" max="100" value="0" step="10">
+                            <div class="range-hint">Speech speed (reused from Edge TTS settings)</div>
+                        </div>
 
-                    <div class="control-group">
-                        <label>
-                            <input type="checkbox" id="ttsAutoPlay" checked>
-                            Auto-play AI responses
-                        </label>
-                    </div>
+                        <div class="control-group">
+                            <label>Volume: <span class="range-value" id="ttsVolumeValue">0%</span></label>
+                            <input type="range" id="ttsVolume" min="-50" max="50" value="0" step="10">
+                            <div class="range-hint">Speech volume (reused from Edge TTS settings)</div>
+                        </div>
 
-                    <button class="upload-btn" id="testTtsBtn" style="width: 100%; margin-top: 10px;">
-                        🔊 Test Voice
-                    </button>
+                        <div class="control-group">
+                            <label>
+                                <input type="checkbox" id="ttsAutoPlay" checked>
+                                Auto-play AI responses
+                            </label>
+                        </div>
+                        
+                        <button class="upload-btn" id="testFishTtsBtn" style="width: 100%; margin-top: 10px; background: linear-gradient(135deg, #3b82f6, #10b981);">
+                            🐟 Test Voice
+                        </button>
+                        
+                        <div style="padding: 12px; background: rgba(255, 193, 7, 0.1); border-left: 3px solid #ffc107; border-radius: 4px; margin-top: 15px;">
+                            <p style="margin: 0; font-size: 0.9em; color: var(--text-secondary);">
+                                ℹ️ <strong>Note:</strong> Fish Audio uses amplitude-based lip-sync (less precise than Edge TTS phonemes). First sentence has ~1s delay, then pre-buffering makes it instant!
+                            </p>
+                        </div>
+                    </div>
 
                     <div class="background-controls" style="margin-top: 15px;">
                         <button class="control-btn" id="resetTTSBtn">🔄 Reset TTS Settings</button>

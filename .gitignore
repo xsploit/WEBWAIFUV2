@@ -54,6 +54,12 @@ build/
 # *.db
 # *.sqlite
 
+# Netlify
+.netlify/
+netlify-functions/
+.netlify.state
 
-
+# Local Netlify CLI
+.netlify/state.json
+.netlify/functions-serve/
 

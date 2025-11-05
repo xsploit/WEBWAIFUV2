@@ -71,6 +71,25 @@ const LLM_PROVIDERS = {
 };
 
 // =============================================
+// TTS Provider Configuration
+// =============================================
+const TTS_PROVIDERS = {
+    edge: {
+        name: 'Edge TTS (Microsoft)',
+        apiKeyRequired: false,
+        free: true,
+        voices: [] // Populated by VoicesManager
+    },
+    fish: {
+        name: 'Fish Audio',
+        baseUrl: 'https://api.fish.audio',
+        apiKeyRequired: true,
+        free: false,
+        models: [] // Will be fetched from API
+    }
+};
+
+// =============================================
 // Initialize APP_STATE
 // =============================================
 const APP_STATE = {
@@ -150,11 +169,16 @@ const APP_STATE = {
             userName: localStorage.getItem('userName') || '',
             
             // TTS Settings
+            ttsProvider: localStorage.getItem('ttsProvider') || 'edge', // 'edge' or 'fish'
             ttsVoice: localStorage.getItem('ttsVoice') || 'en-US-AvaMultilingualNeural',
             ttsRate: parseInt(localStorage.getItem('ttsRate') || '0'),
             ttsPitch: parseFloat(localStorage.getItem('ttsPitch') || '0'),
             ttsVolume: parseInt(localStorage.getItem('ttsVolume') || '0'),
             ttsAutoPlay: localStorage.getItem('ttsAutoPlay') !== 'false',
+            
+            // Fish Audio Settings
+            fishApiKey: localStorage.getItem('fishApiKey') || '',
+            fishVoiceId: localStorage.getItem('fishVoiceId') || '',
             
             // VRM Settings
             currentVrmPath: getSafeVrmPath(),
@@ -1375,6 +1399,63 @@ async function synthesizeChunk(text) {
     return { audioBlob, wordBoundaries, phonemes: perWordPhonemes, text };
 }
 
+// Synthesize audio using Fish Audio via Netlify Function
+async function synthesizeFishAudioChunk(text) {
+    // Use Netlify function (works locally via netlify dev and in production)
+    const url = '/.netlify/functions/fish-tts';
+    
+    const requestBody = {
+        text: text,
+        reference_id: APP_STATE.settings.fishVoiceId || null,
+        
+        // Speed optimizations
+        latency: "balanced",    // Faster synthesis mode
+        chunk_length: 100,      // Minimum = fastest
+        
+        // Audio format
+        format: "mp3",
+        mp3_bitrate: 128,
+        
+        // Prosody controls (map from existing TTS settings)
+        prosody: {
+            speed: 1 + (APP_STATE.settings.ttsRate / 100),
+            volume: APP_STATE.settings.ttsVolume
+        }
+    };
+    
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-fish-api-key': APP_STATE.settings.fishApiKey  // User's API key
+            },
+            body: JSON.stringify(requestBody)
+        });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Fish Audio API error (${response.status}): ${errorText}`);
+        }
+        
+        // Response is audio blob
+        const audioBlob = await response.blob();
+        
+        console.log(`🐟 Fish Audio synthesized ${text.length} chars`);
+        
+        // Return in same format as Edge TTS for compatibility
+        return {
+            audioBlob: audioBlob,
+            wordBoundaries: [],  // Empty = triggers amplitude lip-sync mode
+            phonemes: null,      // No phonemes = pure audio analysis
+            text: text
+        };
+    } catch (error) {
+        console.error('❌ Fish Audio synthesis error:', error);
+        throw error;
+    }
+}
+
 async function speakText(text) {
     if (!text || text.trim() === '') return;
 
@@ -1385,7 +1466,11 @@ async function speakText(text) {
         // START PRE-BUFFERING: Synthesize next chunk in background
         if (APP_STATE.speechQueue.length === 1 && !nextChunkReady) {
             console.log('🔄 Pre-buffering next chunk in background...');
-            synthesizeChunk(text).then(result => {
+            // Use same provider for pre-buffering
+            const synthesizeFunc = APP_STATE.settings.ttsProvider === 'fish' 
+                ? synthesizeFishAudioChunk 
+                : synthesizeChunk;
+            synthesizeFunc(text).then(result => {
                 nextChunkReady = result;
                 console.log('✅ Next chunk ready!');
             }).catch(err => {
@@ -1422,7 +1507,12 @@ async function speakText(text) {
             nextChunkReady = null; // Clear it
         } else {
             console.log('🔄 Synthesizing chunk (no pre-buffer available)...');
-            chunkData = await synthesizeChunk(text);
+            // Use Fish Audio or Edge TTS based on provider setting
+            if (APP_STATE.settings.ttsProvider === 'fish') {
+                chunkData = await synthesizeFishAudioChunk(text);
+            } else {
+                chunkData = await synthesizeChunk(text);
+            }
         }
 
         const { audioBlob, wordBoundaries, phonemes } = chunkData;
@@ -1436,7 +1526,11 @@ async function speakText(text) {
         if (APP_STATE.speechQueue.length > 0) {
             const nextText = APP_STATE.speechQueue[0];
             console.log('🔄 Starting pre-buffer for next chunk...');
-            synthesizeChunk(nextText).then(result => {
+            // Use same provider for pre-buffering
+            const synthesizeFunc = APP_STATE.settings.ttsProvider === 'fish' 
+                ? synthesizeFishAudioChunk 
+                : synthesizeChunk;
+            synthesizeFunc(nextText).then(result => {
                 nextChunkReady = result;
                 console.log('✅ Next chunk pre-buffered and ready!');
             }).catch(err => {
@@ -3043,6 +3137,96 @@ function setupLLMControls() {
 }
 
 function setupTTSControls() {
+    // TTS Provider selector
+    const ttsProvider = document.getElementById('ttsProvider');
+    if (ttsProvider) {
+        ttsProvider.value = APP_STATE.settings.ttsProvider || 'edge';
+        ttsProvider.addEventListener('change', (e) => {
+            saveSetting('ttsProvider', e.target.value);
+            
+            // Show/hide provider-specific settings
+            const edgeSettings = document.getElementById('edgeTTSSettings');
+            const fishSettings = document.getElementById('fishAudioSettings');
+            
+            if (edgeSettings) {
+                edgeSettings.classList.toggle('hidden', e.target.value !== 'edge');
+            }
+            if (fishSettings) {
+                fishSettings.classList.toggle('hidden', e.target.value !== 'fish');
+            }
+            
+            // Fetch models if Fish selected and has API key
+            if (e.target.value === 'fish' && APP_STATE.settings.fishApiKey) {
+                fetchFishAudioModels(APP_STATE.settings.fishApiKey);
+            }
+            
+            showStatus(`✅ Switched to ${TTS_PROVIDERS[e.target.value].name}`, 'success');
+        });
+        
+        // Trigger initial display
+        ttsProvider.dispatchEvent(new Event('change'));
+    }
+    
+    // Fish Audio API Key
+    const fishApiKey = document.getElementById('fishApiKey');
+    if (fishApiKey) {
+        fishApiKey.value = APP_STATE.settings.fishApiKey || '';
+        fishApiKey.addEventListener('change', async (e) => {
+            const apiKey = e.target.value.trim();
+            saveSetting('fishApiKey', apiKey);
+            APP_STATE.settings.fishApiKey = apiKey;
+            
+            // Auto-fetch models when key is entered
+            if (apiKey) {
+                await fetchFishAudioModels(apiKey);
+            } else {
+                TTS_PROVIDERS.fish.models = [];
+                updateFishModelOptions();
+            }
+        });
+    }
+    
+    // Fish Voice ID selector
+    const fishVoiceId = document.getElementById('fishVoiceId');
+    if (fishVoiceId) {
+        fishVoiceId.value = APP_STATE.settings.fishVoiceId || '';
+        fishVoiceId.addEventListener('change', (e) => {
+            saveSetting('fishVoiceId', e.target.value);
+            showStatus('✅ Fish Audio voice selected', 'success');
+        });
+    }
+    
+    // Test Fish TTS button
+    const testFishTtsBtn = document.getElementById('testFishTtsBtn');
+    if (testFishTtsBtn) {
+        testFishTtsBtn.addEventListener('click', async () => {
+            if (!APP_STATE.settings.fishApiKey) {
+                showStatus('❌ Please enter Fish Audio API key', 'error');
+                return;
+            }
+            if (!APP_STATE.settings.fishVoiceId) {
+                showStatus('❌ Please select a voice', 'error');
+                return;
+            }
+            
+            testFishTtsBtn.disabled = true;
+            testFishTtsBtn.textContent = '⏳ Testing...';
+            
+            try {
+                await speakText('Hello! This is a test of Fish Audio text to speech. How do I sound?');
+                testFishTtsBtn.textContent = '✅ Test Voice';
+                setTimeout(() => {
+                    testFishTtsBtn.textContent = '🐟 Test Voice';
+                    testFishTtsBtn.disabled = false;
+                }, 2000);
+            } catch (error) {
+                testFishTtsBtn.textContent = '❌ Test Failed';
+                testFishTtsBtn.disabled = false;
+                showStatus('❌ Fish Audio test failed: ' + error.message, 'error');
+            }
+        });
+    }
+    
     const ttsVoice = document.getElementById('ttsVoice');
     const ttsRate = document.getElementById('ttsRate');
     const ttsPitch = document.getElementById('ttsPitch');
@@ -3884,6 +4068,78 @@ async function fetchGeminiModels(apiKey) {
         console.error('❌ Failed to set Gemini models:', error);
     }
     return [];
+}
+
+// =============================================
+// Fish Audio Model Fetching
+// =============================================
+async function fetchFishAudioModels(apiKey) {
+    try {
+        showStatus('🔄 Loading Fish Audio voices...', 'loading');
+        
+        // Use Netlify function instead of direct API call
+        const response = await fetch('/.netlify/functions/fish-models', {
+            headers: { 
+                'x-fish-api-key': apiKey 
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch Fish models: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Extract model IDs and names
+        const models = data.items ? data.items.map(m => ({
+            id: m._id || m.id,
+            name: m.title || m.name || m.id
+        })) : [];
+        
+        console.log('🐟 Fish Audio models loaded:', models.length, 'voices');
+        TTS_PROVIDERS.fish.models = models;
+        updateFishModelOptions();
+        
+        showStatus(`✅ Loaded ${models.length} Fish Audio voices`, 'success');
+        return models;
+    } catch (error) {
+        console.error('❌ Failed to fetch Fish Audio models:', error);
+        showStatus('❌ Failed to load Fish Audio voices', 'error');
+        return [];
+    }
+}
+
+function updateFishModelOptions() {
+    const modelSelect = document.getElementById('fishVoiceId');
+    if (!modelSelect) return;
+    
+    modelSelect.innerHTML = '';
+    
+    if (TTS_PROVIDERS.fish.models.length === 0) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = '⏳ Enter API key to load voices...';
+        option.disabled = true;
+        modelSelect.appendChild(option);
+        return;
+    }
+    
+    // Add default option
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'Select a voice...';
+    modelSelect.appendChild(defaultOption);
+    
+    // Add voice models
+    TTS_PROVIDERS.fish.models.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.id;
+        option.textContent = model.name;
+        if (model.id === APP_STATE.settings.fishVoiceId) {
+            option.selected = true;
+        }
+        modelSelect.appendChild(option);
+    });
 }
 
 // =============================================

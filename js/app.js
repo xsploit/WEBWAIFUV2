@@ -2319,9 +2319,9 @@ async function sendToAI(message) {
     showStatus('🤖 AI is thinking...', 'loading');
 
     try {
-        // Save user message to memory (if system is loaded)
+        // Save user message to memory in background (non-blocking for faster TTS)
         if (APP_STATE.modelsLoaded) {
-            await saveMemory(message, 'user');
+            saveMemory(message, 'user').catch(err => console.warn('Memory save error:', err));
         }
 
         // Retrieve relevant memories using semantic search
@@ -2351,9 +2351,9 @@ async function sendToAI(message) {
             response = await callLLM(message, false, null, memoryContext);
         }
 
-        // Save assistant response to memory (if system is loaded)
+        // Save assistant response to memory in background (non-blocking)
         if (APP_STATE.modelsLoaded) {
-            await saveMemory(response, 'assistant');
+            saveMemory(response, 'assistant').catch(err => console.warn('Memory save error:', err));
         }
 
         // Add to conversation history
@@ -2384,10 +2384,10 @@ async function sendToAI(message) {
     } finally {
         APP_STATE.isProcessing = false;
 
-        // Process queue
+        // Process queue immediately (no delay needed - pre-buffering handles TTS timing)
         if (APP_STATE.requestQueue.length > 0) {
             const nextMessage = APP_STATE.requestQueue.shift();
-            setTimeout(() => sendToAI(nextMessage), 500);
+            sendToAI(nextMessage);
         }
     }
 }

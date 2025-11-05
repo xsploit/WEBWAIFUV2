@@ -16,8 +16,8 @@ import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers
 // =============================================
 // TRANSFORMERS.JS CONFIGURATION - USE LOCAL MODELS
 // =============================================
-// Configure to use locally hosted models (fixes Netlify CDN issues)
-env.allowRemoteModels = false;  // Don't use Hugging Face CDN
+// Configure to use locally hosted models (works locally AND on Netlify)
+env.allowRemoteModels = false;  // Don't use CDN
 env.allowLocalModels = true;    // Use local files
 env.localModelPath = '/public/models/';  // Path to local models
 

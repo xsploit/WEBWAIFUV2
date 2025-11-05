@@ -197,7 +197,7 @@ const APP_STATE = {
             
             // VRM Settings
             currentVrmPath: getSafeVrmPath(),
-            avatarPositionY: parseFloat(localStorage.getItem('avatarPositionY') || '-0.8'),
+            avatarPositionY: parseFloat(localStorage.getItem('avatarPositionY') || '0'),
             avatarScale: parseFloat(localStorage.getItem('avatarScale') || '1'),
             autoSnapToFloor: localStorage.getItem('autoSnapToFloor') !== 'false', // Default enabled
             snapToFloor: localStorage.getItem('snapToFloor') !== 'false', // Default true

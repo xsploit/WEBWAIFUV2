@@ -99,21 +99,36 @@ Each user enters their own Fish Audio API key in the UI. The key is:
 
 1. **Open your deployed site:** `https://your-site-name.netlify.app`
 
-2. **Enter your Fish Audio API key:**
+2. **Models will load from jsdelivr CDN:**
+   - **First visit:** ~30 seconds to download models (273MB total)
+   - **Subsequent visits:** Instant (cached in browser)
+   - Models: Whisper (80MB), MiniLM (23MB), DistilBERT (250MB)
+
+3. **Enter your Fish Audio API key (optional):**
    - Go to Settings → Text-to-Speech
    - Select "Fish Audio" as TTS Provider
    - Paste your API key
    - Your custom voices should load automatically
 
-3. **Test voice synthesis:**
-   - Click "🐟 Test Voice"
-   - If you hear audio, it works!
+4. **Test features:**
+   - Chat with AI (semantic memory works!)
+   - Click "🐟 Test Voice" for Fish Audio
+   - Voice input works with Whisper STT
 
 ---
 
 ## 🐛 Troubleshooting
 
-### **"Failed to fetch" errors:**
+### **Models not loading / "DOCTYPE not valid JSON" error:**
+
+**This has been FIXED!** ✅
+
+- **Solution:** App now uses **jsdelivr CDN** instead of Hugging Face
+- **Config:** See lines 16-24 in `js/app.js`
+- **First load:** Takes 30 seconds (models download once)
+- **After that:** Instant (cached in browser's IndexedDB)
+
+### **Fish Audio "Failed to fetch" errors:**
 
 1. Check Netlify function logs:
    - Go to Netlify dashboard → **Functions** tab

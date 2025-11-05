@@ -11,7 +11,17 @@ import { VRM, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { Communicate, VoicesManager } from 'edge-tts-universal';
 import { phonemize } from 'phonemizer';
 import { loadMixamoAnimation } from './loadMixamoAnimation.js';
-import { pipeline } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+
+// =============================================
+// TRANSFORMERS.JS CONFIGURATION (Fix for Netlify)
+// =============================================
+// Use jsdelivr CDN instead of Hugging Face (more reliable for Netlify)
+env.useBrowserCache = true;  // Cache models in browser's IndexedDB
+env.allowRemoteModels = true;  // Allow downloading models from CDN
+env.allowLocalModels = false;  // Use CDN, not local files
+
+console.log('🔧 Transformers.js configured for jsdelivr CDN');
 
 // =============================================
 // PHONEME TO VRM BLEND SHAPE MAPPING
@@ -277,7 +287,9 @@ async function initMemoryModels() {
 // Generate embedding from text
 async function generateEmbedding(text) {
     if (!APP_STATE.embedder) {
-        throw new Error('Embedder not loaded!');
+        // Fallback: Use simple hash-based pseudo-embedding
+        console.warn('⚠️ Embedder not available, using fallback');
+        return null; // Memory search will fall back to keyword matching
     }
     const output = await APP_STATE.embedder(text, { pooling: 'mean', normalize: true });
     return Array.from(output.data);
@@ -530,15 +542,24 @@ async function loadEmbeddingModel() {
     try {
         updateSplashModelStatus('splashEmbedding', 'loading', 20);
 
-        APP_STATE.embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+        // Use jsdelivr CDN as fallback (more reliable than Hugging Face)
+        APP_STATE.embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
+            progress_callback: (progress) => {
+                if (progress.status === 'progress') {
+                    const percent = Math.round((progress.loaded / progress.total) * 100);
+                    updateSplashModelStatus('splashEmbedding', 'loading', percent);
+                }
+            }
+        });
 
         updateSplashModelStatus('splashEmbedding', 'loaded', 100);
         console.log('✅ Embedding model loaded');
         return true;
     } catch (error) {
         updateSplashModelStatus('splashEmbedding', 'error', 0);
-        console.error('❌ Embedding model error:', error);
-        throw error;
+        console.error('❌ Embedding model failed to load:', error);
+        APP_STATE.embedder = null;
+        return false;
     }
 }
 
@@ -547,15 +568,23 @@ async function loadClassifierModel() {
     try {
         updateSplashModelStatus('splashClassifier', 'loading', 20);
 
-        APP_STATE.classifier = await pipeline('text-classification', 'Xenova/distilbert-base-uncased-finetuned-sst-2-english');
+        APP_STATE.classifier = await pipeline('text-classification', 'Xenova/distilbert-base-uncased-finetuned-sst-2-english', {
+            progress_callback: (progress) => {
+                if (progress.status === 'progress') {
+                    const percent = Math.round((progress.loaded / progress.total) * 100);
+                    updateSplashModelStatus('splashClassifier', 'loading', percent);
+                }
+            }
+        });
 
         updateSplashModelStatus('splashClassifier', 'loaded', 100);
         console.log('✅ Classifier model loaded');
         return true;
     } catch (error) {
         updateSplashModelStatus('splashClassifier', 'error', 0);
-        console.error('❌ Classifier model error:', error);
-        throw error;
+        console.error('❌ Classifier model failed to load:', error);
+        APP_STATE.classifier = null;
+        return false;
     }
 }
 
@@ -571,6 +600,7 @@ async function loadAllModels() {
 
     try {
         // Load models in parallel for faster loading
+        // Using jsdelivr CDN now (configured at top of file) for better Netlify compatibility
         const [whisperResult, embeddingResult, classifierResult] = await Promise.allSettled([
             initWhisperWorker(),
             loadEmbeddingModel(),

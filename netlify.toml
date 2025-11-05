@@ -1,7 +1,8 @@
 # Netlify configuration for WEBWAIFUV2
 
 [build]
-  # No build command needed for static site
+  # Pull Git LFS files for Transformers.js models
+  command = "git lfs pull"
   publish = "."
   functions = "netlify/functions"
 

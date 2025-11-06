@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live2D Test - WEBWAIFU</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            overflow: hidden;
+        }
+
+        #container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #canvas {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        .controls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            max-width: 300px;
+        }
+
+        .controls h2 {
+            margin-bottom: 15px;
+            font-size: 20px;
+            color: #ffffff;
+        }
+
+        .controls button {
+            width: 100%;
+            margin: 5px 0;
+            padding: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: transform 0.2s;
+        }
+
+        .controls button:hover {
+            transform: scale(1.05);
+        }
+
+        .controls button:active {
+            transform: scale(0.95);
+        }
+
+        #status {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px 30px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            font-size: 14px;
+        }
+
+        .info {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            max-width: 300px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .info h3 {
+            margin-bottom: 10px;
+            color: #667eea;
+        }
+
+        .loading {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <div class="controls">
+        <h2>🎭 Live2D Test Controls</h2>
+        <button onclick="playMotion('idle')">🧘 Idle Motion</button>
+        <button onclick="playMotion('tap_body')">👆 Tap Body</button>
+        <button onclick="playExpression('f01')">😊 Happy</button>
+        <button onclick="playExpression('f02')">😮 Surprised</button>
+        <button onclick="testLipSync()">💬 Test Lip Sync</button>
+        <button onclick="togglePhysics()">🌊 Toggle Physics</button>
+    </div>
+
+    <div class="info">
+        <h3>📋 Live2D Info</h3>
+        <p><strong>Status:</strong> <span id="modelStatus">Loading...</span></p>
+        <p><strong>Mouse Tracking:</strong> <span id="mouseTracking">Enabled</span></p>
+        <p><strong>Current Motion:</strong> <span id="currentMotion">None</span></p>
+        <p><strong>Expression:</strong> <span id="currentExpression">Default</span></p>
+        <p style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.2);">
+            <strong>Note:</strong> Using a sample Live2D model from CDN. Click buttons to test animations!
+        </p>
+    </div>
+
+    <div id="status" class="loading">⏳ Loading Live2D model...</div>
+
+    <!-- Pixi.js v7 -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@7/dist/pixi.min.js"></script>
+    
+    <!-- Live2D Cubism Core -->
+    <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
+    
+    <!-- pixi-live2d-display (CORRECT BUNDLE) -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.5.0/dist/index.min.js"></script>
+
+    <script>
+        console.log('🎭 Live2D Test Starting...');
+        
+        let app;
+        let model;
+        let physicsEnabled = true;
+
+        // Initialize Pixi.js application
+        try {
+            app = new PIXI.Application({
+                view: document.getElementById('canvas'),
+                width: 800,
+                height: 600,
+                backgroundColor: 0x1a1a2e,
+                resolution: window.devicePixelRatio || 1,
+                autoDensity: true
+            });
+
+            console.log('✅ Pixi.js initialized');
+        } catch (error) {
+            console.error('❌ Pixi.js init error:', error);
+            updateStatus('❌ Failed to initialize Pixi.js', 'error');
+        }
+
+        // Load Live2D model
+        async function loadModel() {
+            try {
+                updateStatus('⏳ Loading Live2D model from CDN...');
+                
+                // Check if pixi-live2d-display loaded correctly
+                console.log('Checking PIXI.live2d:', PIXI.live2d);
+                
+                if (!PIXI.live2d || !PIXI.live2d.Live2DModel) {
+                    throw new Error('pixi-live2d-display not loaded. PIXI.live2d is: ' + typeof PIXI.live2d);
+                }
+                
+                // Using a sample Hiyori model from Live2D samples
+                const modelUrl = 'https://cdn.jsdelivr.net/gh/guansss/pixi-live2d-display/test/assets/haru/haru_greeter_t03.model3.json';
+                
+                console.log('📥 Fetching model from:', modelUrl);
+                
+                model = await PIXI.live2d.Live2DModel.from(modelUrl, {
+                    autoInteract: true,
+                    autoUpdate: true
+                });
+
+                if (!model) {
+                    throw new Error('Model failed to load');
+                }
+
+                console.log('✅ Model loaded successfully!');
+                console.log('Model info:', {
+                    width: model.width,
+                    height: model.height,
+                    motionGroups: model.internalModel?.motionManager?.definitions || 'N/A',
+                    expressions: model.internalModel?.motionManager?.expressionManager || 'N/A'
+                });
+
+                // Scale and position model
+                model.scale.set(0.3);
+                model.x = app.screen.width / 2;
+                model.y = app.screen.height / 2;
+                model.anchor.set(0.5, 0.5);
+
+                // Add model to stage
+                app.stage.addChild(model);
+
+                // Enable mouse tracking
+                model.on('hit', (hitAreas) => {
+                    console.log('👆 Hit areas:', hitAreas);
+                    if (hitAreas.includes('body')) {
+                        playMotion('tap_body');
+                    }
+                });
+
+                // Mouse tracking for head movement
+                app.stage.interactive = true;
+                app.stage.on('pointermove', (e) => {
+                    if (model && model.internalModel) {
+                        const point = e.data.global;
+                        const dx = (point.x - model.x) / app.screen.width;
+                        const dy = (point.y - model.y) / app.screen.height;
+                        
+                        // Update look target (if supported)
+                        if (model.internalModel.focusController) {
+                            model.internalModel.focusController.focus(dx * 2, dy * 2);
+                        }
+                    }
+                });
+
+                updateStatus('✅ Live2D model loaded! Click buttons to test.', 'success');
+                document.getElementById('modelStatus').textContent = 'Loaded ✅';
+
+                // Play initial idle motion
+                setTimeout(() => {
+                    playMotion('idle');
+                }, 500);
+
+            } catch (error) {
+                console.error('❌ Model loading error:', error);
+                updateStatus('❌ Failed to load model. Using fallback...', 'error');
+                document.getElementById('modelStatus').textContent = 'Failed ❌';
+                
+                // Try alternative model
+                tryFallbackModel();
+            }
+        }
+
+        // Try fallback model if primary fails
+        async function tryFallbackModel() {
+            try {
+                console.log('🔄 Trying fallback model...');
+                const fallbackUrl = 'https://cdn.jsdelivr.net/gh/guansss/pixi-live2d-display/test/assets/shizuku/shizuku.model.json';
+                
+                model = await PIXI.live2d.Live2DModel.from(fallbackUrl);
+                
+                model.scale.set(0.3);
+                model.x = app.screen.width / 2;
+                model.y = app.screen.height / 2;
+                model.anchor.set(0.5, 0.5);
+                
+                app.stage.addChild(model);
+                
+                updateStatus('✅ Fallback model loaded!', 'success');
+                document.getElementById('modelStatus').textContent = 'Loaded (Fallback) ✅';
+            } catch (err) {
+                console.error('❌ Fallback model also failed:', err);
+                updateStatus('❌ All models failed. Check console.', 'error');
+            }
+        }
+
+        // Play motion
+        function playMotion(motionName) {
+            if (!model) {
+                console.warn('⚠️ No model loaded');
+                return;
+            }
+
+            try {
+                console.log(`🎬 Playing motion: ${motionName}`);
+                
+                if (model.motion) {
+                    model.motion(motionName);
+                } else if (model.internalModel?.motionManager) {
+                    model.internalModel.motionManager.startMotion(motionName);
+                }
+                
+                document.getElementById('currentMotion').textContent = motionName;
+                updateStatus(`🎬 Playing motion: ${motionName}`, 'info');
+            } catch (error) {
+                console.error('❌ Motion error:', error);
+                updateStatus(`❌ Motion "${motionName}" not found`, 'error');
+            }
+        }
+
+        // Play expression
+        function playExpression(expressionName) {
+            if (!model) {
+                console.warn('⚠️ No model loaded');
+                return;
+            }
+
+            try {
+                console.log(`😊 Playing expression: ${expressionName}`);
+                
+                if (model.expression) {
+                    model.expression(expressionName);
+                } else if (model.internalModel?.motionManager?.expressionManager) {
+                    model.internalModel.motionManager.expressionManager.setExpression(expressionName);
+                }
+                
+                document.getElementById('currentExpression').textContent = expressionName;
+                updateStatus(`😊 Expression: ${expressionName}`, 'info');
+            } catch (error) {
+                console.error('❌ Expression error:', error);
+                updateStatus(`❌ Expression "${expressionName}" not found`, 'error');
+            }
+        }
+
+        // Test lip sync (simulated)
+        function testLipSync() {
+            if (!model) {
+                console.warn('⚠️ No model loaded');
+                return;
+            }
+
+            console.log('💬 Testing lip sync...');
+            updateStatus('💬 Simulating lip sync animation...', 'info');
+
+            // Simulate talking by playing a series of mouth shapes
+            const lipSyncSequence = [0.8, 0.3, 0.9, 0.2, 0.7, 0.4, 0.8, 0.1, 0];
+            let index = 0;
+
+            const lipSyncInterval = setInterval(() => {
+                if (index >= lipSyncSequence.length) {
+                    clearInterval(lipSyncInterval);
+                    updateStatus('✅ Lip sync test complete!', 'success');
+                    return;
+                }
+
+                // Try to set mouth open amount
+                if (model.internalModel?.coreModel) {
+                    const mouthOpenParam = model.internalModel.coreModel.getParameterIndex('ParamMouthOpenY');
+                    if (mouthOpenParam !== undefined) {
+                        model.internalModel.coreModel.setParameterValueById(mouthOpenParam, lipSyncSequence[index]);
+                    }
+                }
+
+                index++;
+            }, 100);
+        }
+
+        // Toggle physics
+        function togglePhysics() {
+            physicsEnabled = !physicsEnabled;
+            
+            if (model && model.internalModel?.physics) {
+                model.internalModel.physics.enabled = physicsEnabled;
+            }
+
+            document.getElementById('mouseTracking').textContent = physicsEnabled ? 'Enabled ✅' : 'Disabled ❌';
+            updateStatus(`🌊 Physics: ${physicsEnabled ? 'ON' : 'OFF'}`, 'info');
+        }
+
+        // Update status message
+        function updateStatus(message, type = 'info') {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.classList.remove('loading');
+
+            // Color based on type
+            if (type === 'error') {
+                statusEl.style.background = 'rgba(220, 38, 38, 0.9)';
+            } else if (type === 'success') {
+                statusEl.style.background = 'rgba(34, 197, 94, 0.9)';
+            } else {
+                statusEl.style.background = 'rgba(0, 0, 0, 0.7)';
+            }
+
+            // Clear after 3 seconds for non-error messages
+            if (type !== 'error') {
+                setTimeout(() => {
+                    statusEl.style.background = 'rgba(0, 0, 0, 0.7)';
+                }, 3000);
+            }
+        }
+
+        // Check if all libraries loaded
+        function checkLibraries() {
+            console.log('📚 Checking libraries...');
+            console.log('PIXI:', typeof PIXI);
+            console.log('PIXI.Application:', typeof PIXI?.Application);
+            console.log('PIXI.live2d:', typeof PIXI?.live2d);
+            console.log('Live2DCubismCore:', typeof Live2DCubismCore);
+            
+            if (typeof PIXI === 'undefined') {
+                console.error('❌ Pixi.js not loaded!');
+                return false;
+            }
+            
+            if (typeof Live2DCubismCore === 'undefined') {
+                console.error('❌ Live2D Cubism Core not loaded!');
+                return false;
+            }
+            
+            if (!PIXI.live2d) {
+                console.error('❌ pixi-live2d-display not loaded!');
+                return false;
+            }
+            
+            console.log('✅ All libraries loaded successfully!');
+            return true;
+        }
+
+        // Start loading (with delay to ensure scripts loaded)
+        window.addEventListener('load', () => {
+            console.log('🚀 Window loaded, checking libraries...');
+            
+            // Give scripts time to initialize
+            setTimeout(() => {
+                if (checkLibraries()) {
+                    loadModel();
+                } else {
+                    updateStatus('❌ Failed to load required libraries. Check console.', 'error');
+                }
+            }, 500);
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (app) {
+                app.renderer.resize(window.innerWidth, window.innerHeight);
+            }
+        });
+
+        // Log errors
+        window.addEventListener('error', (e) => {
+            console.error('🔥 Global error:', e.error);
+            updateStatus('❌ Error occurred. Check console.', 'error');
+        });
+    </script>
+</body>
+</html>
+

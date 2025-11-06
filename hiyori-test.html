@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hiyori Momose PRO - Live2D Cubism 3.x Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            overflow: hidden;
+        }
+
+        #container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        .controls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            max-width: 300px;
+            z-index: 1000;
+        }
+
+        .controls h2 {
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+
+        .controls button {
+            width: 100%;
+            margin: 5px 0;
+            padding: 12px;
+            background: linear-gradient(135deg, #ff6b9d, #c471ed);
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: transform 0.2s;
+        }
+
+        .controls button:hover {
+            transform: scale(1.05);
+        }
+
+        #status {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 14px;
+            z-index: 1000;
+        }
+
+        .info {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            max-width: 300px;
+            font-size: 13px;
+            line-height: 1.6;
+            z-index: 1000;
+        }
+
+        .info h3 {
+            color: #ff6b9d;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+
+    <div class="controls">
+        <h2>✨ Hiyori Momose PRO</h2>
+        <button onclick="playMotion('Idle')">🧘 Idle</button>
+        <button onclick="playMotion('TapBody')">👆 Tap Body</button>
+        <button onclick="startAutoMotion()">🎬 Auto Motion</button>
+        <button onclick="startMouthFlaps()">👄 Start Mouth Flaps</button>
+        <button onclick="stopMouthFlaps()">🤐 Stop Mouth Flaps</button>
+        <button onclick="model.scale.set(model.scale.x * 1.2)">🔍 Zoom In</button>
+        <button onclick="model.scale.set(model.scale.x * 0.8)">🔍 Zoom Out</button>
+    </div>
+
+    <div class="info">
+        <h3>✨ Hiyori Momose PRO</h3>
+        <p><strong>Status:</strong> <span id="modelStatus">Loading...</span></p>
+        <p><strong>Format:</strong> Cubism SDK 3.x</p>
+        <p><strong>Files:</strong></p>
+        <ul style="font-size: 11px; margin-left: 15px;">
+            <li>model3.json ✅</li>
+            <li>moc3 (433KB) ✅</li>
+            <li>physics3.json ✅</li>
+            <li>pose3.json ✅</li>
+            <li>motions/ ✅</li>
+        </ul>
+        <p style="margin-top: 10px; font-size: 11px; color: #aaa;">
+            Click and drag to move Hiyori around!
+        </p>
+    </div>
+
+    <div id="status">⏳ Loading Hiyori PRO...</div>
+
+    <!-- Pixi.js v6.x (required by pixi-live2d-display) -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@6.5.10/dist/browser/pixi.min.js"></script>
+    
+    <!-- Live2D Cubism Core for Cubism 4 (supports model3.json) -->
+    <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
+    
+    <!-- pixi-live2d-display CUBISM 4 ONLY (for model3.json support) -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
+
+    <script>
+        console.log('✨ Hiyori PRO Test Starting...');
+        
+        // Expose PIXI to window (required by pixi-live2d-display)
+        window.PIXI = PIXI;
+        
+        let app;
+        let model;
+
+        // Initialize Pixi
+        try {
+            app = new PIXI.Application({
+                view: document.createElement('canvas'),
+                width: window.innerWidth,
+                height: window.innerHeight,
+                backgroundColor: 0x00000000, // Transparent
+                resolution: window.devicePixelRatio || 1,
+                autoDensity: true
+            });
+
+            document.getElementById('container').appendChild(app.view);
+            console.log('✅ Pixi.js initialized');
+        } catch (error) {
+            console.error('❌ Pixi init error:', error);
+            updateStatus('❌ Failed to initialize Pixi.js', 'error');
+        }
+
+        // Load Hiyori model
+        async function loadHiyori() {
+            try {
+                updateStatus('⏳ Loading Hiyori PRO from local files...');
+                
+                // Check if libraries loaded
+                console.log('Checking libraries:');
+                console.log('- PIXI:', typeof PIXI);
+                console.log('- Live2DCubismCore:', typeof Live2DCubismCore);
+                console.log('- PIXI.live2d:', typeof PIXI?.live2d);
+                
+                if (!PIXI.live2d || !PIXI.live2d.Live2DModel) {
+                    throw new Error('pixi-live2d-display not loaded properly');
+                }
+                
+                // Load from local assets folder
+                const modelPath = './assets/hiyori/hiyori_pro_jp.model3.json';
+                
+                console.log('📥 Loading model from:', modelPath);
+                
+                model = await PIXI.live2d.Live2DModel.from(modelPath, {
+                    autoInteract: true,
+                    autoUpdate: true
+                });
+
+                if (!model) {
+                    throw new Error('Model failed to load');
+                }
+
+                console.log('✅ Hiyori model loaded!');
+                console.log('Model info:', {
+                    width: model.width,
+                    height: model.height,
+                    internalModel: !!model.internalModel
+                });
+                
+                // List all available parameters for debugging
+                if (model.internalModel && model.internalModel.coreModel) {
+                    try {
+                        const coreModel = model.internalModel.coreModel;
+                        const paramCount = coreModel.getParameterCount();
+                        console.log(`📋 Available parameters (${paramCount}):`);
+                        
+                        // Get all parameter IDs
+                        const paramIds = [];
+                        for (let i = 0; i < paramCount; i++) {
+                            // Use _model (raw Cubism model) to get parameter IDs
+                            if (coreModel._model && coreModel._model.parameters && coreModel._model.parameters.ids) {
+                                paramIds.push(coreModel._model.parameters.ids[i]);
+                            }
+                        }
+                        
+                        if (paramIds.length > 0) {
+                            paramIds.forEach(id => console.log(`  - ${id}`));
+                        } else {
+                            console.log('  (Could not list parameter names - but they exist!)');
+                        }
+                    } catch (e) {
+                        console.log('📋 Parameter listing skipped (API variation)');
+                    }
+                }
+
+                // Scale and position
+                const scale = Math.min(
+                    app.screen.width / model.width,
+                    app.screen.height / model.height
+                ) * 0.8;
+                
+                model.scale.set(scale);
+                model.x = app.screen.width / 2;
+                model.y = app.screen.height / 2;
+                model.anchor.set(0.5, 0.5);
+
+                // Make interactive
+                model.interactive = true;
+                model.buttonMode = true;
+                
+                // Drag support
+                model.on('pointerdown', onDragStart);
+                model.on('pointerup', onDragEnd);
+                model.on('pointerupoutside', onDragEnd);
+                model.on('pointermove', onDragMove);
+                
+                let dragging = false;
+                let dragOffset = { x: 0, y: 0 };
+                
+                function onDragStart(e) {
+                    dragging = true;
+                    const pos = e.data.global;
+                    dragOffset.x = pos.x - model.x;
+                    dragOffset.y = pos.y - model.y;
+                }
+                
+                function onDragEnd() {
+                    dragging = false;
+                }
+                
+                function onDragMove(e) {
+                    if (dragging) {
+                        const pos = e.data.global;
+                        model.x = pos.x - dragOffset.x;
+                        model.y = pos.y - dragOffset.y;
+                    }
+                }
+
+                // Add to stage
+                app.stage.addChild(model);
+
+                // Mouse tracking for head movement
+                app.stage.interactive = true;
+                app.stage.on('pointermove', (e) => {
+                    if (model && model.internalModel && !dragging) {
+                        const point = e.data.global;
+                        const dx = (point.x - model.x) / app.screen.width;
+                        const dy = (point.y - model.y) / app.screen.height;
+                        
+                        if (model.internalModel.focusController) {
+                            model.internalModel.focusController.focus(dx * 2, dy * 2);
+                        }
+                    }
+                });
+
+                updateStatus('✅ Hiyori PRO loaded! Click and drag to move.', 'success');
+                document.getElementById('modelStatus').textContent = 'Loaded ✅';
+
+                // Start auto motion after 1 second
+                setTimeout(() => {
+                    startAutoMotion();
+                }, 1000);
+
+            } catch (error) {
+                console.error('❌ Model loading error:', error);
+                updateStatus('❌ Failed to load Hiyori: ' + error.message, 'error');
+                document.getElementById('modelStatus').textContent = 'Failed ❌';
+            }
+        }
+
+        // Play motion
+        function playMotion(motionName) {
+            if (!model) {
+                console.warn('⚠️ No model loaded');
+                return;
+            }
+
+            try {
+                console.log(`🎬 Playing motion: ${motionName}`);
+                
+                if (model.motion) {
+                    model.motion(motionName);
+                } else if (model.internalModel?.motionManager) {
+                    model.internalModel.motionManager.startMotion(motionName, 0);
+                }
+                
+                updateStatus(`🎬 Playing: ${motionName}`, 'info');
+            } catch (error) {
+                console.error('❌ Motion error:', error);
+                updateStatus(`❌ Motion "${motionName}" not found`, 'error');
+            }
+        }
+
+        // Auto motion
+        function startAutoMotion() {
+            if (!model) return;
+            
+            updateStatus('🎬 Auto motion enabled', 'info');
+            
+            // Play random motion every 5 seconds
+            setInterval(() => {
+                const motions = ['Idle', 'TapBody'];
+                const randomMotion = motions[Math.floor(Math.random() * motions.length)];
+                playMotion(randomMotion);
+            }, 5000);
+        }
+
+        // Mouth flaps
+        let mouthFlapInterval = null;
+        
+        function startMouthFlaps() {
+            if (!model) {
+                console.warn('⚠️ No model loaded');
+                return;
+            }
+            
+            stopMouthFlaps(); // Stop any existing animation
+            
+            updateStatus('👄 Mouth flaps started!', 'info');
+            console.log('👄 Starting mouth flaps...');
+            
+            // Find mouth parameter names (varies by model)
+            const mouthParams = [
+                'ParamMouthOpenY',
+                'PARAM_MOUTH_OPEN_Y',
+                'MouthOpen',
+                'Mouth'
+            ];
+            
+            let mouthParam = null;
+            let mouthParamIndex = -1;
+            
+            // Check which parameter exists using the correct API
+            if (model.internalModel && model.internalModel.coreModel) {
+                const coreModel = model.internalModel.coreModel;
+                const paramCount = coreModel.getParameterCount();
+                
+                // Search through all parameters
+                for (let i = 0; i < paramCount; i++) {
+                    // Try to get parameter ID
+                    let paramId = null;
+                    if (coreModel._model && coreModel._model.parameters && coreModel._model.parameters.ids) {
+                        paramId = coreModel._model.parameters.ids[i];
+                    }
+                    
+                    if (paramId && mouthParams.includes(paramId)) {
+                        mouthParam = paramId;
+                        mouthParamIndex = i;
+                        console.log('✅ Found mouth parameter:', mouthParam, 'at index', mouthParamIndex);
+                        break;
+                    }
+                }
+            }
+            
+            if (mouthParamIndex === -1) {
+                console.warn('⚠️ Could not find mouth parameter');
+                updateStatus('❌ Mouth parameter not found', 'error');
+                return;
+            }
+            
+            // Animate mouth flaps (talking animation)
+            let mouthOpen = 0;
+            let direction = 1;
+            
+            mouthFlapInterval = setInterval(() => {
+                if (!model || !model.internalModel) return;
+                
+                try {
+                    // Oscillate between 0 and 1
+                    mouthOpen += direction * 0.15;
+                    
+                    if (mouthOpen >= 0.8) {
+                        direction = -1;
+                    } else if (mouthOpen <= 0) {
+                        direction = 1;
+                    }
+                    
+                    // Set mouth parameter using setParameterValueByIndex
+                    const coreModel = model.internalModel.coreModel;
+                    coreModel.setParameterValueByIndex(mouthParamIndex, mouthOpen);
+                } catch (error) {
+                    console.error('❌ Mouth flap error:', error);
+                    stopMouthFlaps();
+                }
+            }, 50); // 20 FPS
+        }
+        
+        function stopMouthFlaps() {
+            if (mouthFlapInterval) {
+                clearInterval(mouthFlapInterval);
+                mouthFlapInterval = null;
+                
+                // Reset mouth to closed
+                if (model && model.internalModel && model.internalModel.coreModel) {
+                    try {
+                        const coreModel = model.internalModel.coreModel;
+                        const paramCount = coreModel.getParameterCount();
+                        const mouthParams = ['ParamMouthOpenY', 'PARAM_MOUTH_OPEN_Y', 'MouthOpen', 'Mouth'];
+                        
+                        // Find and reset mouth parameter
+                        for (let i = 0; i < paramCount; i++) {
+                            let paramId = null;
+                            if (coreModel._model && coreModel._model.parameters && coreModel._model.parameters.ids) {
+                                paramId = coreModel._model.parameters.ids[i];
+                            }
+                            
+                            if (paramId && mouthParams.includes(paramId)) {
+                                coreModel.setParameterValueByIndex(i, 0);
+                                console.log('🤐 Reset mouth parameter:', paramId);
+                                break;
+                            }
+                        }
+                    } catch (error) {
+                        console.error('❌ Error resetting mouth:', error);
+                    }
+                }
+                
+                updateStatus('🤐 Mouth flaps stopped', 'info');
+                console.log('🤐 Mouth flaps stopped');
+            }
+        }
+
+        // Update status
+        function updateStatus(message, type = 'info') {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+
+            if (type === 'error') {
+                statusEl.style.background = 'rgba(220, 38, 38, 0.9)';
+            } else if (type === 'success') {
+                statusEl.style.background = 'rgba(34, 197, 94, 0.9)';
+            } else {
+                statusEl.style.background = 'rgba(0, 0, 0, 0.8)';
+            }
+
+            if (type !== 'error') {
+                setTimeout(() => {
+                    statusEl.style.background = 'rgba(0, 0, 0, 0.8)';
+                }, 3000);
+            }
+        }
+
+        // Start loading after scripts loaded
+        window.addEventListener('load', () => {
+            console.log('🚀 Window loaded');
+            
+            setTimeout(() => {
+                // Check if all libraries loaded
+                if (typeof PIXI === 'undefined') {
+                    updateStatus('❌ Pixi.js not loaded', 'error');
+                    return;
+                }
+                
+                if (typeof Live2DCubismCore === 'undefined') {
+                    updateStatus('❌ Live2D Cubism Core not loaded', 'error');
+                    return;
+                }
+                
+                if (!PIXI.live2d) {
+                    updateStatus('❌ pixi-live2d-display not loaded', 'error');
+                    return;
+                }
+                
+                loadHiyori();
+            }, 500);
+        });
+
+        // Resize handler
+        window.addEventListener('resize', () => {
+            if (app) {
+                app.renderer.resize(window.innerWidth, window.innerHeight);
+                if (model) {
+                    model.x = window.innerWidth / 2;
+                    model.y = window.innerHeight / 2;
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+

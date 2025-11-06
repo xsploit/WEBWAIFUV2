@@ -56,7 +56,7 @@
     <div id="canvas-container"></div>
     
     <!-- Canvas for Live2D Avatar (Pixi.js) - Hidden by default -->
-    <canvas id="pixi-canvas" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: none; z-index: 0;"></canvas>
+    <canvas id="pixi-canvas" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: none; z-index: 10; background: #000; pointer-events: auto;"></canvas>
 
     <!-- AI Response Bubble -->
     <div class="speech-bubble-overlay" id="speechBubble">
@@ -247,6 +247,31 @@
                         </select>
                     </div>
 
+                    <!-- Background Section (Live2D Only) -->
+                    <div class="accordion-section" id="live2dBackgroundSection" style="display: none;">
+                        <div class="accordion-header" data-target="live2dBackgroundSettings">
+                            <span>🖼️ Background</span>
+                            <span class="accordion-icon">▼</span>
+                        </div>
+                        <div class="accordion-content" id="live2dBackgroundSettings">
+                            <div class="tts-info">
+                                <p>🖼️ Upload a background image for your Live2D avatar</p>
+                                <p>Images will be scaled to fit the canvas</p>
+                            </div>
+
+                            <div class="file-upload-container">
+                                <input type="file" id="live2dBackgroundUpload" accept="image/*" style="display: none;">
+                                <button class="upload-btn" id="uploadLive2dBgBtn">
+                                    🖼️ Upload Background Image
+                                </button>
+                            </div>
+
+                            <div class="background-controls">
+                                <button class="control-btn" id="clearLive2dBgBtn">Clear Background</button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="control-group">
                         <label>Avatar Position Y: <span class="range-value" id="posYValue">0.00</span></label>
                         <input type="range" id="avatarPositionY" min="-5" max="5" step="0.1" value="0">
@@ -263,6 +288,12 @@
                         <label>Mouth Smoothing: <span class="range-value" id="mouthSmoothValue">0.10</span></label>
                         <input type="range" id="mouthSmoothing" min="0" max="100" step="1" value="10">
                         <div class="range-hint">Smoothness of mouth animation (0-100, lower = snappier)</div>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Phoneme Gain: <span class="range-value" id="phonemeGainValue">1.00</span></label>
+                        <input type="range" id="phonemeGain" min="0" max="200" step="1" value="100">
+                        <div class="range-hint">Intensity of phoneme-based lip-sync (0-200%, lower = subtler)</div>
                     </div>
 
                     <div class="background-controls">
@@ -674,22 +705,9 @@
                         </label>
                     </div>
 
-                    <div class="tts-info" style="margin-top: 20px;">
-                        <p>🖼️ <strong>Background Image</strong></p>
-                        <p>Upload custom backdrop behind 3D scene</p>
-                    </div>
-
-                    <div class="file-upload-container">
-                        <input type="file" id="backgroundUpload" accept="image/*,video/*" style="display: none;">
-                        <button class="upload-btn" id="uploadBgBtn">
-                            🖼️ Upload Background Image
-                        </button>
-                    </div>
-
                     <div class="background-controls">
                         <button class="control-btn" id="resetRoomBtn">Reset to Built-in Room</button>
                         <button class="control-btn" id="autoScaleRoomBtn">Auto-Scale Room</button>
-                        <button class="control-btn" id="clearBgBtn">Clear Background</button>
                     </div>
                 </div>
             </div>

@@ -13,6 +13,14 @@ export class Live2DManager {
         this.mouthParameter = null;
         this.mouthParamIndex = -1;
         this.mouthFlapInterval = null;
+        this.backgroundSprite = null; // Background image sprite
+        this.backgroundUrl = null; // Store background URL for resize handling
+        this._isRightDragging = false; // Right-click drag flag
+        this._lastMouseX = 0; // Track last mouse X for dragging
+        this._lastMouseY = 0; // Track last mouse Y for dragging
+        this._minScale = 0.05; // Min zoom for model (5% of original size)
+        this._maxScale = 5.0; // Max zoom for model (500% of original size)
+        this._initialScale = null; // Store initial scale to allow going smaller
         
         // Store original animation state for re-enabling
         this._originalMotionUpdate = null;
@@ -40,12 +48,59 @@ export class Live2DManager {
                 width: window.innerWidth,
                 height: window.innerHeight,
                 backgroundColor: 0x000000,
-                backgroundAlpha: 0, // Transparent
+                backgroundAlpha: 1, // Fully opaque for background layer
                 resolution: window.devicePixelRatio || 1,
-                autoDensity: true
+                autoDensity: true,
+                antialias: true, // Better quality rendering
+                clearBeforeRender: true // Clear canvas before each frame
             });
             
             console.log('✅ Pixi.js initialized for Live2D');
+
+            // Prevent default context menu on right-click (so we can drag)
+            if (this.pixiApp.view) {
+                this.pixiApp.view.addEventListener('contextmenu', (e) => e.preventDefault());
+
+                // Mouse down - start right-click drag
+                this.pixiApp.view.addEventListener('mousedown', (e) => {
+                    if (e.button === 2) { // Right button
+                        this._isRightDragging = true;
+                        this._lastMouseX = e.clientX;
+                        this._lastMouseY = e.clientY;
+                    }
+                });
+
+                // Mouse move - drag model when right button held
+                this.pixiApp.view.addEventListener('mousemove', (e) => {
+                    if (!this._isRightDragging || !this.currentModel) return;
+                    const dx = e.clientX - this._lastMouseX;
+                    const dy = e.clientY - this._lastMouseY;
+                    this._lastMouseX = e.clientX;
+                    this._lastMouseY = e.clientY;
+                    // Move model in screen space
+                    this.currentModel.x += dx;
+                    this.currentModel.y += dy;
+                });
+
+                // Mouse up/leave - end drag
+                const endDrag = () => { this._isRightDragging = false; };
+                this.pixiApp.view.addEventListener('mouseup', endDrag);
+                this.pixiApp.view.addEventListener('mouseleave', endDrag);
+
+                // Wheel - zoom model (scale) with Alt modifier
+                this.pixiApp.view.addEventListener('wheel', (e) => {
+                    if (!this.currentModel) return;
+                    // Only zoom if Alt is held (Alt+Wheel for model scaling)
+                    if (!e.altKey) return;
+                    e.preventDefault();
+                    // UP = bigger (zoom in), DOWN = smaller (zoom out)
+                    // deltaY is negative when scrolling UP, positive when scrolling DOWN
+                    const zoomFactor = Math.pow(1.0015, -e.deltaY);
+                    const currentScale = this.currentModel.scale.x; // uniform scale
+                    const nextScale = Math.max(this._minScale, Math.min(this._maxScale, currentScale * zoomFactor));
+                    this.currentModel.scale.set(nextScale);
+                }, { passive: false });
+            }
             return this.pixiApp;
         } catch (error) {
             console.error('❌ Pixi.js init error:', error);
@@ -118,6 +173,9 @@ export class Live2DManager {
                 this.pixiApp.screen.height / this.currentModel.height
             ) * 0.8;
             
+            // Store initial scale so user can zoom smaller than default
+            this._initialScale = scale;
+            
             this.currentModel.scale.set(scale);
             this.currentModel.x = this.pixiApp.screen.width / 2;
             this.currentModel.y = this.pixiApp.screen.height / 2;
@@ -127,8 +185,16 @@ export class Live2DManager {
             this.currentModel.interactive = true;
             this.currentModel.buttonMode = true;
             
-            // Add to stage
-            this.pixiApp.stage.addChild(this.currentModel);
+            // Add to stage - ensure model is on top of background
+            // If background exists, add model after it; otherwise just add normally
+            if (this.backgroundSprite && this.pixiApp.stage.children.includes(this.backgroundSprite)) {
+                // Background exists - add model on top
+                const bgIndex = this.pixiApp.stage.getChildIndex(this.backgroundSprite);
+                this.pixiApp.stage.addChildAt(this.currentModel, bgIndex + 1);
+            } else {
+                // No background - just add normally
+                this.pixiApp.stage.addChild(this.currentModel);
+            }
             
             // Initially disable animations (will be re-enabled when TTS stops)
             this.disableAnimations();
@@ -416,8 +482,40 @@ export class Live2DManager {
     show() {
         if (this.pixiApp && this.pixiApp.view) {
             this.pixiApp.view.style.display = 'block';
+            this.pixiApp.view.style.zIndex = '500'; // Below UI elements (header: 1000, chat: 1000) but above canvas-container (1)
+            this.pixiApp.view.style.pointerEvents = 'auto'; // Allow model dragging
+            this.pixiApp.view.style.position = 'fixed'; // Ensure proper stacking context
+            this.pixiApp.view.style.top = '0';
+            this.pixiApp.view.style.left = '0';
+            this.pixiApp.view.style.width = '100%';
+            this.pixiApp.view.style.height = '100%';
+
+            // Add class to body to hide overlay via CSS (more reliable than injected styles)
+            document.body.classList.add('live2d-active');
+
+            // Force overlay to be behind Live2D canvas
+            let style = document.getElementById('live2d-overlay-fix');
+            if (!style) {
+                style = document.createElement('style');
+                style.id = 'live2d-overlay-fix';
+                style.textContent = `
+                    body::after {
+                        display: none !important;
+                        visibility: hidden !important;
+                        opacity: 0 !important;
+                    }
+                    body::before {
+                        z-index: -1 !important;
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+
+            // Force a reflow to ensure styles are applied
+            void this.pixiApp.view.offsetHeight;
+
             this.isActive = true;
-            console.log('✅ Live2D mode active');
+            console.log('✅ Live2D mode active - overlay hidden, canvas z-index: 9999');
         }
     }
 
@@ -432,6 +530,15 @@ export class Live2DManager {
             // Reset mouth to neutral when hiding (prevent stuck-open mouth)
             this.resetMouthToNeutral();
             
+            // Remove class from body to restore overlay
+            document.body.classList.remove('live2d-active');
+            
+            // Remove injected style
+            const style = document.getElementById('live2d-overlay-fix');
+            if (style) {
+                style.remove();
+            }
+            
             console.log('✅ Live2D mode hidden');
         }
     }
@@ -440,13 +547,20 @@ export class Live2DManager {
      * Handle window resize
      */
     handleResize() {
-        if (!this.pixiApp || !this.currentModel) return;
+        if (!this.pixiApp) return;
         
         this.pixiApp.renderer.resize(window.innerWidth, window.innerHeight);
         
-        // Recenter model
-        this.currentModel.x = window.innerWidth / 2;
-        this.currentModel.y = window.innerHeight / 2;
+        // Recenter model if exists
+        if (this.currentModel) {
+            this.currentModel.x = window.innerWidth / 2;
+            this.currentModel.y = window.innerHeight / 2;
+        }
+        
+        // Update background size if exists
+        if (this.backgroundSprite) {
+            this.updateBackgroundSize();
+        }
     }
 
     /**
@@ -467,6 +581,92 @@ export class Live2DManager {
         }
         
         console.log('✅ Live2D manager destroyed');
+    }
+
+    /**
+     * Set background image for Live2D canvas
+     * @param {string} imageUrl - URL of the background image
+     */
+    setBackground(imageUrl) {
+        if (!this.pixiApp) {
+            console.warn('⚠️ Pixi.js not initialized - cannot set background');
+            return;
+        }
+
+        // Remove existing background if any
+        this.clearBackground();
+
+        // Load and set background image with high quality
+        const texture = PIXI.Texture.from(imageUrl);
+        
+        // Set texture to use linear filtering for better quality when scaled
+        texture.baseTexture.scaleMode = PIXI.SCALE_MODES.LINEAR;
+        
+        this.backgroundSprite = new PIXI.Sprite(texture);
+        
+        // Scale to fill canvas while maintaining aspect ratio
+        const scaleX = this.pixiApp.screen.width / this.backgroundSprite.width;
+        const scaleY = this.pixiApp.screen.height / this.backgroundSprite.height;
+        const scale = Math.max(scaleX, scaleY); // Cover entire canvas
+        
+        this.backgroundSprite.scale.set(scale);
+        
+        // Center the background
+        this.backgroundSprite.x = (this.pixiApp.screen.width - this.backgroundSprite.width) / 2;
+        this.backgroundSprite.y = (this.pixiApp.screen.height - this.backgroundSprite.height) / 2;
+        
+        // Ensure background is fully opaque and visible
+        this.backgroundSprite.alpha = 1.0;
+        
+        // Clear any existing children first, then add background at index 0 (bottom layer)
+        // Remove model temporarily if it exists
+        let model = null;
+        if (this.currentModel && this.pixiApp.stage.children.includes(this.currentModel)) {
+            model = this.currentModel;
+            this.pixiApp.stage.removeChild(this.currentModel);
+        }
+        
+        // Add background first (bottom layer)
+        this.pixiApp.stage.addChildAt(this.backgroundSprite, 0);
+        
+        // Re-add model on top if it existed
+        if (model) {
+            this.pixiApp.stage.addChild(model);
+        }
+        
+        // Store URL for resize handling
+        this.backgroundUrl = imageUrl;
+        
+        console.log('✅ Live2D background set');
+    }
+    
+    /**
+     * Update background size on window resize
+     */
+    updateBackgroundSize() {
+        if (!this.backgroundSprite || !this.pixiApp) return;
+        
+        // Recalculate scale and position
+        const scaleX = this.pixiApp.screen.width / this.backgroundSprite.texture.width;
+        const scaleY = this.pixiApp.screen.height / this.backgroundSprite.texture.height;
+        const scale = Math.max(scaleX, scaleY);
+        
+        this.backgroundSprite.scale.set(scale);
+        this.backgroundSprite.x = (this.pixiApp.screen.width - this.backgroundSprite.width) / 2;
+        this.backgroundSprite.y = (this.pixiApp.screen.height - this.backgroundSprite.height) / 2;
+    }
+
+    /**
+     * Clear background image
+     */
+    clearBackground() {
+        if (this.backgroundSprite && this.pixiApp) {
+            this.pixiApp.stage.removeChild(this.backgroundSprite);
+            this.backgroundSprite.destroy();
+            this.backgroundSprite = null;
+            this.backgroundUrl = null;
+            console.log('✅ Live2D background cleared');
+        }
     }
 }
 

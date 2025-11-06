@@ -32,20 +32,21 @@ console.log('🔧 Transformers.js configured for LOCAL models:', {
 // PHONEME TO VRM BLEND SHAPE MAPPING
 // =============================================
 const PHONEME_TO_BLEND_SHAPE = {
-    // Vowels - INCREASED intensity (0.5-1.0 range for MUCH MORE visible mouth movement)
+    // Vowels - Using ALL 5 VRM blend shapes (aa, ih, ou, ee, oh)
     'ə': { aa: 0.5, ih: 0.2 },   'æ': { aa: 0.7 },   'a': { aa: 0.8 },   'ɑ': { aa: 1.0 },
-    'ɒ': { ou: 0.8 },            'ɔ': { ou: 1.0 },   'o': { ou: 0.8 },   'ʊ': { ou: 0.7 },
-    'u': { ou: 1.0 },            'ʌ': { ou: 0.5, aa: 0.3 }, 'ɪ': { ih: 0.6 }, 'i': { ih: 0.7 },
-    'e': { ih: 0.5, aa: 0.2 },   'ɛ': { ih: 0.6, aa: 0.3 },
-    'ɜ': { aa: 0.5, ou: 0.3 },   // R-colored vowel (bird, her, burn)
+    'ɒ': { oh: 0.8 },            'ɔ': { oh: 1.0 },   'o': { oh: 0.9 },   'ʊ': { ou: 0.7 },
+    'u': { ou: 1.0 },            'ʌ': { aa: 0.5, oh: 0.3 }, 
+    'ɪ': { ih: 0.6 },            'i': { ee: 0.8, ih: 0.3 },  // "ee" sound uses ee blend shape
+    'e': { ee: 0.7, ih: 0.2 },   'ɛ': { ee: 0.6, ih: 0.3 },  // "eh" sound uses ee
+    'ɜ': { aa: 0.5, oh: 0.3 },   // R-colored vowel (bird, her, burn)
     'ɐ': { aa: 0.6 },            // Near-open central vowel (about, comma)
 
     // Consonants - MORE visible (0.2-0.6 range for better articulation)
     'f': { ih: 0.3 }, 'v': { ih: 0.3 },
-    'θ': { ih: 0.4 },            'ð': { ih: 0.4 },  's': { ih: 0.4 },   'z': { ih: 0.4 },
+    'θ': { ih: 0.4 },            'ð': { ih: 0.4 },  's': { ih: 0.4 },   'z': { ee: 0.4 },  // "z" uses ee
     'ʃ': { ou: 0.4 },            'ʒ': { ou: 0.4 },  't': { ih: 0.3 },   'd': { ih: 0.3 },
     'n': { ih: 0.3 },            'l': { ih: 0.3 },  'ɹ': { ou: 0.4 },   'w': { ou: 0.6 },
-    'j': { ih: 0.4 },
+    'j': { ee: 0.4 },            // "y" sound uses ee
 
     // Previously "silent" consonants - NOW HAVE MOVEMENT!
     'p': { aa: 0.3 },            'b': { aa: 0.3 },  'm': { aa: 0.3 },
@@ -205,6 +206,8 @@ const APP_STATE = {
             avatarScale: parseFloat(localStorage.getItem('avatarScale') || '1'),
             autoSnapToFloor: localStorage.getItem('autoSnapToFloor') !== 'false', // Default enabled
             snapToFloor: localStorage.getItem('snapToFloor') !== 'false', // Default true
+            mouthSmoothing: parseFloat(localStorage.getItem('mouthSmoothing') || '10'), // 0-100, default 10 = 0.10
+            phonemeGain: parseFloat(localStorage.getItem('phonemeGain') || '100'), // 0-200, default 100 = 1.0
             
             // Live2D Settings
             currentLive2DPath: localStorage.getItem('currentLive2DPath') || '',
@@ -847,6 +850,75 @@ function initThreeJS() {
     
     console.log('✅ Orbit controls enabled - Click and drag to rotate view!');
     
+    // VRM Controls: Right-click drag to move, mouse wheel to zoom
+    const canvas = APP_STATE.renderer.domElement;
+    let isRightDragging = false;
+    let lastMouseX = 0;
+    let lastMouseY = 0;
+    const minVRMScale = 0.1; // 10% of original
+    const maxVRMScale = 5.0; // 500% of original
+    
+    // Prevent context menu on right-click
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    
+    // Right-click drag to move VRM
+    canvas.addEventListener('mousedown', (e) => {
+        if (e.button === 2 && APP_STATE.vrm) { // Right button
+            isRightDragging = true;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+            // Disable orbit controls while dragging
+            APP_STATE.controls.enabled = false;
+        }
+    });
+    
+    canvas.addEventListener('mousemove', (e) => {
+        if (isRightDragging && APP_STATE.vrm) {
+            const dx = (e.clientX - lastMouseX) * 0.01; // Scale movement
+            const dy = -(e.clientY - lastMouseY) * 0.01; // Invert Y (screen Y is opposite to 3D Y)
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+            
+            // Move VRM in world space
+            APP_STATE.vrm.scene.position.x += dx;
+            APP_STATE.vrm.scene.position.y += dy;
+        }
+    });
+    
+    const endVRMDrag = () => {
+        isRightDragging = false;
+        APP_STATE.controls.enabled = true; // Re-enable orbit controls
+    };
+    canvas.addEventListener('mouseup', endVRMDrag);
+    canvas.addEventListener('mouseleave', endVRMDrag);
+    
+    // Mouse wheel to zoom VRM (scale) - only with Alt modifier
+    canvas.addEventListener('wheel', (e) => {
+        if (!APP_STATE.vrm) return;
+        // Only zoom model if Alt is held (Alt+Wheel for model scaling), otherwise let camera zoom work normally
+        if (!e.altKey) return;
+        e.preventDefault();
+        
+        // UP = bigger, DOWN = smaller
+        const zoomFactor = Math.pow(1.0015, -e.deltaY);
+        const currentScale = APP_STATE.vrm.scene.scale.x; // Uniform scale
+        const nextScale = Math.max(minVRMScale, Math.min(maxVRMScale, currentScale * zoomFactor));
+        
+        APP_STATE.vrm.scene.scale.set(nextScale, nextScale, nextScale);
+        
+        // Update saved scale setting
+        APP_STATE.settings.avatarScale = nextScale;
+        saveSetting('avatarScale', nextScale);
+        
+        // Update UI slider if it exists
+        const scaleSlider = document.getElementById('avatarScale');
+        if (scaleSlider) {
+            scaleSlider.value = nextScale;
+            const scaleValue = document.getElementById('avatarScaleValue');
+            if (scaleValue) scaleValue.textContent = nextScale.toFixed(2);
+        }
+    }, { passive: false });
+    
     // Build 3D Room Environment
     buildRoom();
     
@@ -855,9 +927,15 @@ function initThreeJS() {
     
     // Handle window resize
     window.addEventListener('resize', () => {
+        // VRM/Three.js resize
         APP_STATE.camera.aspect = window.innerWidth / window.innerHeight;
         APP_STATE.camera.updateProjectionMatrix();
         APP_STATE.renderer.setSize(window.innerWidth, window.innerHeight);
+        
+        // Live2D resize
+        if (live2DManager && live2DManager.isActive) {
+            live2DManager.handleResize();
+        }
     });
     
     // Start animation loop
@@ -897,15 +975,19 @@ function animate() {
     } else {
         // Not speaking or audio ended - close mouth
         if (APP_STATE.settings.avatarType === 'vrm' && APP_STATE.vrm?.expressionManager) {
-            // VRM: Close blend shapes
+            // VRM: Close ALL blend shapes
             const manager = APP_STATE.vrm.expressionManager;
             if (manager.getExpression('aa')) manager.setValue('aa', 0);
             if (manager.getExpression('ih')) manager.setValue('ih', 0);
             if (manager.getExpression('ou')) manager.setValue('ou', 0);
+            if (manager.getExpression('ee')) manager.setValue('ee', 0);
+            if (manager.getExpression('oh')) manager.setValue('oh', 0);
             previousMouthAmount = 0;
             previousAa = 0;
             previousIh = 0;
             previousOu = 0;
+            previousEe = 0;
+            previousOh = 0;
             cachedPhonemeSegments = null;
             lastPhonemeString = '';
         } else if (APP_STATE.settings.avatarType === 'live2d' && live2DManager?.isActive) {
@@ -1487,6 +1569,7 @@ async function synthesizeChunk(text) {
             perWordPhonemes = phonemeSegments;
             console.log('✅ Perfect phoneme-word match (1:1)');
         } else if (phonemeSegments.length > wordCount) {
+            // More phonemes than words: group phonemes proportionally
             const perWord = Math.floor(phonemeSegments.length / wordCount);
             for (let i = 0; i < wordCount; i++) {
                 const start = i * perWord;
@@ -1495,11 +1578,16 @@ async function synthesizeChunk(text) {
             }
             console.log(`📊 Grouped ${phonemeSegments.length} phonemes into ${wordCount} words`);
         } else {
+            // Fewer phonemes than words: distribute proportionally using rounding (not floor)
+            // This prevents words from getting the same phoneme multiple times
             for (let i = 0; i < wordCount; i++) {
-                const idx = Math.floor(i * phonemeSegments.length / wordCount);
-                perWordPhonemes.push(phonemeSegments[idx] || '');
+                // Use rounding for better distribution (0.5 rounds up, prevents repeats)
+                const idx = Math.round((i * phonemeSegments.length) / wordCount);
+                // Clamp to valid range
+                const clampedIdx = Math.min(idx, phonemeSegments.length - 1);
+                perWordPhonemes.push(phonemeSegments[clampedIdx] || '');
             }
-            console.log(`📊 Distributed ${phonemeSegments.length} phonemes across ${wordCount} words`);
+            console.log(`📊 Distributed ${phonemeSegments.length} phonemes across ${wordCount} words (using rounding)`);
         }
 
         // Log per-word mapping for debugging (first 5 words)
@@ -1641,6 +1729,8 @@ async function speakText(text) {
             APP_STATE.vrm.expressionManager.setValue('aa', 0);
             APP_STATE.vrm.expressionManager.setValue('ih', 0);
             APP_STATE.vrm.expressionManager.setValue('ou', 0);
+            APP_STATE.vrm.expressionManager.setValue('ee', 0);
+            APP_STATE.vrm.expressionManager.setValue('oh', 0);
         }
 
         // Check if we have a pre-buffered chunk ready
@@ -1705,6 +1795,8 @@ async function speakText(text) {
                     APP_STATE.vrm.expressionManager.setValue('aa', 0);
                     APP_STATE.vrm.expressionManager.setValue('ih', 0);
                     APP_STATE.vrm.expressionManager.setValue('ou', 0);
+                    APP_STATE.vrm.expressionManager.setValue('ee', 0);
+                    APP_STATE.vrm.expressionManager.setValue('oh', 0);
                 }
                 
                 const nextText = APP_STATE.speechQueue.shift();
@@ -1725,6 +1817,8 @@ async function speakText(text) {
                     APP_STATE.vrm.expressionManager.setValue('aa', 0);
                     APP_STATE.vrm.expressionManager.setValue('ih', 0);
                     APP_STATE.vrm.expressionManager.setValue('ou', 0);
+                    APP_STATE.vrm.expressionManager.setValue('ee', 0);
+                    APP_STATE.vrm.expressionManager.setValue('oh', 0);
                 }
                 
                 // Live2D: Re-enable animations when TTS stops
@@ -1766,11 +1860,13 @@ async function speakText(text) {
     }
 }
 
-// Mouth animation state
+// Mouth animation state - ALL 5 VRM blend shapes
 let previousMouthAmount = 0;
 let previousAa = 0;
 let previousIh = 0;
 let previousOu = 0;
+let previousEe = 0;
+let previousOh = 0;
 let cachedPhonemeSegments = null; // Cache parsed phonemes
 let lastPhonemeString = ''; // Track when phonemes change
 
@@ -1884,10 +1980,14 @@ function updateLipSync() {
         if (manager.getExpression('aa')) manager.setValue('aa', 0);
         if (manager.getExpression('ih')) manager.setValue('ih', 0);
         if (manager.getExpression('ou')) manager.setValue('ou', 0);
+        if (manager.getExpression('ee')) manager.setValue('ee', 0);
+        if (manager.getExpression('oh')) manager.setValue('oh', 0);
         previousMouthAmount = 0;
         previousAa = 0;
         previousIh = 0;
         previousOu = 0;
+        previousEe = 0;
+        previousOh = 0;
         cachedPhonemeSegments = null;
         lastPhonemeString = '';
         return;
@@ -1898,10 +1998,14 @@ function updateLipSync() {
         if (manager.getExpression('aa')) manager.setValue('aa', 0);
         if (manager.getExpression('ih')) manager.setValue('ih', 0);
         if (manager.getExpression('ou')) manager.setValue('ou', 0);
+        if (manager.getExpression('ee')) manager.setValue('ee', 0);
+        if (manager.getExpression('oh')) manager.setValue('oh', 0);
         previousMouthAmount = 0;
         previousAa = 0;
         previousIh = 0;
         previousOu = 0;
+        previousEe = 0;
+        previousOh = 0;
         cachedPhonemeSegments = null;
         lastPhonemeString = '';
         return;
@@ -1943,6 +2047,8 @@ function updateLipSync() {
     let targetAa = 0;
     let targetIh = 0;
     let targetOu = 0;
+    let targetEe = 0;
+    let targetOh = 0;
 
     // Check if word timing is valid
     // Valid = has multiple words AND offsets increase (not all 0 or all same)
@@ -1972,9 +2078,13 @@ function updateLipSync() {
         if (manager.getExpression('aa')) manager.setValue('aa', 0);
         if (manager.getExpression('ih')) manager.setValue('ih', 0);
         if (manager.getExpression('ou')) manager.setValue('ou', 0);
+        if (manager.getExpression('ee')) manager.setValue('ee', 0);
+        if (manager.getExpression('oh')) manager.setValue('oh', 0);
         previousAa = 0;
         previousIh = 0;
         previousOu = 0;
+        previousEe = 0;
+        previousOh = 0;
         previousMouthAmount = 0;
         return; // Exit early, don't apply smoothing
     }
@@ -1982,30 +2092,38 @@ function updateLipSync() {
     // ===== PURE AMPLITUDE MODE (when timing is broken or no word match) =====
     if (!hasValidTiming || !currentWordBoundary) {
         // Use PURE audio amplitude for mouth animation
-        // Cycle through mouth shapes FASTER for more responsive animation
+        // Cycle through ALL 5 mouth shapes for more natural movement
         const time = currentTime * 4.5; // Increased from 3x to 4.5x for snappier cycling
         const cycle = Math.sin(time) * 0.5 + 0.5; // 0-1 oscillation
 
         // Primary shape based on amplitude (BOOSTED for visibility)
         targetAa = audioAmplitude * 1.0; // Increased from 0.8 to 1.0 for maximum movement
 
-        // Add variation with sine wave for natural movement
-        if (cycle < 0.33) {
+        // Cycle through ALL 5 blend shapes (aa, ih, ou, ee, oh)
+        if (cycle < 0.2) {
             // More 'aa' (open) - boost even further
             targetAa = Math.min(targetAa * 1.3, 1.0); // Increased from 1.2x to 1.3x
-        } else if (cycle < 0.66) {
+        } else if (cycle < 0.4) {
             // More 'ih' (wide) - boost for visibility
-            targetIh = Math.min(audioAmplitude * 0.75, 1.0); // Increased from 0.6 to 0.75
+            targetIh = Math.min(audioAmplitude * 0.75, 1.0);
             targetAa *= 0.6; // Reduce 'aa' more to emphasize 'ih'
-        } else {
+        } else if (cycle < 0.6) {
             // More 'ou' (round) - boost for visibility
-            targetOu = Math.min(audioAmplitude * 0.75, 1.0); // Increased from 0.6 to 0.75
+            targetOu = Math.min(audioAmplitude * 0.75, 1.0);
             targetAa *= 0.6; // Reduce 'aa' more to emphasize 'ou'
+        } else if (cycle < 0.8) {
+            // More 'ee' (smile) - boost for visibility
+            targetEe = Math.min(audioAmplitude * 0.75, 1.0);
+            targetAa *= 0.6; // Reduce 'aa' more to emphasize 'ee'
+        } else {
+            // More 'oh' (round open) - boost for visibility
+            targetOh = Math.min(audioAmplitude * 0.75, 1.0);
+            targetAa *= 0.6; // Reduce 'aa' more to emphasize 'oh'
         }
 
         // Debug logging (throttled)
         if (Math.random() < 0.02) {
-            console.log(`🔊 AMPLITUDE MODE | Amp: ${audioAmplitude.toFixed(2)} | aa=${targetAa.toFixed(2)}, ih=${targetIh.toFixed(2)}, ou=${targetOu.toFixed(2)}`);
+            console.log(`🔊 AMPLITUDE MODE | Amp: ${audioAmplitude.toFixed(2)} | aa=${targetAa.toFixed(2)}, ih=${targetIh.toFixed(2)}, ou=${targetOu.toFixed(2)}, ee=${targetEe.toFixed(2)}, oh=${targetOh.toFixed(2)}`);
         }
     } else {
         // ===== PHONEME MODE (when timing is valid) =====
@@ -2057,13 +2175,19 @@ function updateLipSync() {
             // Map phoneme to blend shapes using PHONEME_TO_BLEND_SHAPE
             const blendMap = PHONEME_TO_BLEND_SHAPE[phonemeKey] || {};
 
-            // Use phoneme values directly (they're already 0.0-1.0 range)
-            targetAa = blendMap.aa || 0;
-            targetIh = blendMap.ih || 0;
-            targetOu = blendMap.ou || 0;
+            // Get phoneme gain (0-200%, default 100% = 1.0)
+            const phonemeGainMultiplier = (APP_STATE.settings.phonemeGain || 100) / 100;
+
+            // Use phoneme values directly (they're already 0.0-1.0 range) - ALL 5 BLEND SHAPES
+            // Apply phoneme gain multiplier to reduce/increase intensity
+            targetAa = (blendMap.aa || 0) * phonemeGainMultiplier;
+            targetIh = (blendMap.ih || 0) * phonemeGainMultiplier;
+            targetOu = (blendMap.ou || 0) * phonemeGainMultiplier;
+            targetEe = (blendMap.ee || 0) * phonemeGainMultiplier;
+            targetOh = (blendMap.oh || 0) * phonemeGainMultiplier;
 
             // Check if we have a valid phoneme mapping
-            const hasMapping = (targetAa > 0 || targetIh > 0 || targetOu > 0);
+            const hasMapping = (targetAa > 0 || targetIh > 0 || targetOu > 0 || targetEe > 0 || targetOh > 0);
 
             if (hasMapping) {
                 // HYBRID APPROACH: Blend phoneme shape with audio amplitude for maximum responsiveness
@@ -2073,25 +2197,31 @@ function updateLipSync() {
                 const effectiveAmplitude = Math.max(audioAmplitude, 0.3);
                 const amplitudeMultiplier = Math.min(effectiveAmplitude * 2.0, 1.0); // Increased from 1.8x to 2.0x
 
-                // Apply amplitude multiplier to phoneme shapes
+                // Apply amplitude multiplier to phoneme shapes - ALL 5 BLEND SHAPES
                 let phonemeAa = targetAa * amplitudeMultiplier;
                 let phonemeIh = targetIh * amplitudeMultiplier;
                 let phonemeOu = targetOu * amplitudeMultiplier;
+                let phonemeEe = targetEe * amplitudeMultiplier;
+                let phonemeOh = targetOh * amplitudeMultiplier;
 
                 // Add STRONG direct amplitude contribution (50% weight) for instant response
                 const amplitudeBoost = effectiveAmplitude * 0.5; // Increased from 0.3 to 0.5
                 phonemeAa = Math.min(phonemeAa + amplitudeBoost * 1.0, 1.0); // Increased from 0.8 to 1.0
                 phonemeIh = Math.min(phonemeIh + amplitudeBoost * 0.6, 1.0); // Increased from 0.4 to 0.6
                 phonemeOu = Math.min(phonemeOu + amplitudeBoost * 0.6, 1.0); // Increased from 0.4 to 0.6
+                phonemeEe = Math.min(phonemeEe + amplitudeBoost * 0.6, 1.0); // Same boost for ee
+                phonemeOh = Math.min(phonemeOh + amplitudeBoost * 0.6, 1.0); // Same boost for oh
 
                 // Ensure MINIMUM movement - mouth should never be completely closed when sound is playing
-                if (phonemeAa + phonemeIh + phonemeOu < 0.2) {
+                if (phonemeAa + phonemeIh + phonemeOu + phonemeEe + phonemeOh < 0.2) {
                     phonemeAa = Math.max(phonemeAa, effectiveAmplitude * 0.5);
                 }
 
                 targetAa = phonemeAa;
                 targetIh = phonemeIh;
                 targetOu = phonemeOu;
+                targetEe = phonemeEe;
+                targetOh = phonemeOh;
             } else {
                 // No mapping found - use amplitude-based fallback (don't multiply twice!)
                 const isVowel = /[aeiouæɑɔʊʌɪɛəɜɐ]/i.test(phonemeKey); // Added ɜ and ɐ
@@ -2106,7 +2236,7 @@ function updateLipSync() {
 
             // Debug: Log current word, phoneme, and targets
             if (Math.random() < 0.05) { // 5% sample rate
-                console.log(`🗣️ Word[${wordIndex}]: "${currentWordBoundary.word}" | Phonemes: "${wordPhonemes}" | Current: "${phonemeKey}" | Amp: ${audioAmplitude.toFixed(2)} | aa=${targetAa.toFixed(2)}, ih=${targetIh.toFixed(2)}, ou=${targetOu.toFixed(2)}`);
+                console.log(`🗣️ Word[${wordIndex}]: "${currentWordBoundary.word}" | Phonemes: "${wordPhonemes}" | Current: "${phonemeKey}" | Amp: ${audioAmplitude.toFixed(2)} | aa=${targetAa.toFixed(2)}, ih=${targetIh.toFixed(2)}, ou=${targetOu.toFixed(2)}, ee=${targetEe.toFixed(2)}, oh=${targetOh.toFixed(2)}`);
             }
         } else {
             // No phoneme data, use amplitude alone for basic mouth movement
@@ -2114,17 +2244,21 @@ function updateLipSync() {
         }
     }
 
-    // Smooth the transition (exponential smoothing per blend shape)
+    // Smooth the transition (exponential smoothing per blend shape) - ALL 5 BLEND SHAPES
     // smoothingFactor: 0.1 = move 90% towards target each frame (snappy), 0.5 = move 50% (smoother)
     const smoothingFactor = mouthSmoothing;
     const smoothedAa = previousAa + (targetAa - previousAa) * (1 - smoothingFactor);
     const smoothedIh = previousIh + (targetIh - previousIh) * (1 - smoothingFactor);
     const smoothedOu = previousOu + (targetOu - previousOu) * (1 - smoothingFactor);
+    const smoothedEe = previousEe + (targetEe - previousEe) * (1 - smoothingFactor);
+    const smoothedOh = previousOh + (targetOh - previousOh) * (1 - smoothingFactor);
 
-    // Apply blend shapes (cap at 1.0 for FULL range, clamp to 0)
+    // Apply blend shapes (cap at 1.0 for FULL range, clamp to 0) - ALL 5 BLEND SHAPES
     const finalAa = Math.min(Math.max(smoothedAa, 0), 1.0);
     const finalIh = Math.min(Math.max(smoothedIh, 0), 1.0);
     const finalOu = Math.min(Math.max(smoothedOu, 0), 1.0);
+    const finalEe = Math.min(Math.max(smoothedEe, 0), 1.0);
+    const finalOh = Math.min(Math.max(smoothedOh, 0), 1.0);
 
     if (manager.getExpression('aa')) {
         manager.setValue('aa', finalAa);
@@ -2135,12 +2269,20 @@ function updateLipSync() {
     if (manager.getExpression('ou')) {
         manager.setValue('ou', finalOu);
     }
+    if (manager.getExpression('ee')) {
+        manager.setValue('ee', finalEe);
+    }
+    if (manager.getExpression('oh')) {
+        manager.setValue('oh', finalOh);
+    }
 
-    // Update previous values for next frame
+    // Update previous values for next frame - ALL 5 BLEND SHAPES
     previousAa = smoothedAa;
     previousIh = smoothedIh;
     previousOu = smoothedOu;
-    previousMouthAmount = Math.max(smoothedAa, smoothedIh, smoothedOu);
+    previousEe = smoothedEe;
+    previousOh = smoothedOh;
+    previousMouthAmount = Math.max(smoothedAa, smoothedIh, smoothedOu, smoothedEe, smoothedOh);
 }
 
 // =============================================
@@ -2297,10 +2439,20 @@ async function callLLM(message, streaming = false, onChunk = null, memoryContext
                 buffer = lines.pop() || '';
                 
                 for (const line of lines) {
-                    if (!line.trim() || line.trim() === 'data: [DONE]') continue;
+                    const trimmed = line.trim();
                     
-                    const jsonStr = line.replace(/^data: /, '');
-                    if (!jsonStr.trim()) continue;
+                    // Skip empty lines, SSE comments (lines starting with :), and [DONE] marker
+                    if (!trimmed || trimmed.startsWith(':') || trimmed === 'data: [DONE]') continue;
+                    
+                    // Only process lines that start with "data: "
+                    if (!trimmed.startsWith('data: ')) {
+                        // Skip non-data lines (keep-alive, etc.)
+                        continue;
+                    }
+                    
+                    // Extract JSON from "data: {...}" format
+                    const jsonStr = trimmed.replace(/^data: /, '').trim();
+                    if (!jsonStr) continue;
                     
                     try {
                         const data = JSON.parse(jsonStr);
@@ -2329,7 +2481,10 @@ async function callLLM(message, streaming = false, onChunk = null, memoryContext
                             currentSentence = currentSentence.substring(lastIndex);
                         }
                     } catch (parseError) {
-                        console.warn('Failed to parse streaming chunk:', parseError);
+                        // Only log if it's not a comment line (comments are already filtered above)
+                        if (!trimmed.startsWith(':')) {
+                            console.warn('Failed to parse streaming chunk:', parseError, 'Line:', trimmed.substring(0, 50));
+                        }
                     }
                 }
             }
@@ -3655,8 +3810,30 @@ function setupAvatarControls() {
     // Mouth controls
     const mouthSmoothing = document.getElementById('mouthSmoothing');
     if (mouthSmoothing) {
+        // Initialize from saved value
+        mouthSmoothing.value = APP_STATE.settings.mouthSmoothing;
+        document.getElementById('mouthSmoothValue').textContent = (APP_STATE.settings.mouthSmoothing / 100).toFixed(2);
+        
         mouthSmoothing.addEventListener('input', (e) => {
-            document.getElementById('mouthSmoothValue').textContent = (parseFloat(e.target.value) / 100).toFixed(2);
+            const value = parseFloat(e.target.value);
+            document.getElementById('mouthSmoothValue').textContent = (value / 100).toFixed(2);
+            saveSetting('mouthSmoothing', value);
+            console.log(`🎚️ Mouth smoothing set to ${(value / 100).toFixed(2)} (${value}%)`);
+        });
+    }
+    
+    // Phoneme Gain control
+    const phonemeGain = document.getElementById('phonemeGain');
+    if (phonemeGain) {
+        phonemeGain.value = APP_STATE.settings.phonemeGain;
+        document.getElementById('phonemeGainValue').textContent = (APP_STATE.settings.phonemeGain / 100).toFixed(2);
+        
+        phonemeGain.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            const normalizedValue = (value / 100).toFixed(2);
+            document.getElementById('phonemeGainValue').textContent = normalizedValue;
+            saveSetting('phonemeGain', value);
+            console.log(`🎚️ Phoneme gain set to ${normalizedValue}x (${value}%)`);
         });
     }
     
@@ -3859,41 +4036,43 @@ function setupPasswordToggles() {
 }
 
 function setupBackgroundControls() {
-    const uploadBgBtn = document.getElementById('uploadBgBtn');
-    const backgroundUpload = document.getElementById('backgroundUpload');
+    // VRM Background (3D scene) - REMOVED (now VRM-only, no background in 3D Room section)
+    // Background functionality moved to Live2D-only section
     
-    if (uploadBgBtn) {
-        uploadBgBtn.addEventListener('click', () => backgroundUpload.click());
+    // Live2D Background (2D canvas)
+    const uploadLive2dBgBtn = document.getElementById('uploadLive2dBgBtn');
+    const live2dBackgroundUpload = document.getElementById('live2dBackgroundUpload');
+    
+    if (uploadLive2dBgBtn) {
+        uploadLive2dBgBtn.addEventListener('click', () => live2dBackgroundUpload?.click());
     }
     
-    if (backgroundUpload) {
-        backgroundUpload.addEventListener('change', (e) => {
+    if (live2dBackgroundUpload) {
+        live2dBackgroundUpload.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file && file.type.startsWith('image/')) {
                 const url = URL.createObjectURL(file);
-
-                // Load as Three.js texture and set as scene background
-                const textureLoader = new THREE.TextureLoader();
-                textureLoader.load(url, (texture) => {
-                    APP_STATE.scene.background = texture;
-                    showStatus('✅ Background loaded in 3D scene', 'success');
-                    console.log('🖼️ Scene background updated');
-                }, undefined, (error) => {
-                    console.error('❌ Failed to load background texture:', error);
-                    showStatus('❌ Failed to load background', 'error');
-                });
+                
+                // Set background for Live2D canvas
+                if (live2DManager && live2DManager.isActive) {
+                    live2DManager.setBackground(url);
+                    showStatus('✅ Background loaded for Live2D', 'success');
+                    console.log('🖼️ Live2D background updated');
+                } else {
+                    showStatus('⚠️ Load a Live2D model first', 'error');
+                }
             }
         });
     }
     
-    const clearBgBtn = document.getElementById('clearBgBtn');
-
-    if (clearBgBtn) {
-        clearBgBtn.addEventListener('click', () => {
-            // Reset scene background to default dark color
-            APP_STATE.scene.background = new THREE.Color(0x1a1a1a);
-            showStatus('✅ Background cleared', 'success');
-            console.log('🎨 Scene background reset to default');
+    const clearLive2dBgBtn = document.getElementById('clearLive2dBgBtn');
+    if (clearLive2dBgBtn) {
+        clearLive2dBgBtn.addEventListener('click', () => {
+            if (live2DManager && live2DManager.isActive) {
+                live2DManager.clearBackground();
+                showStatus('✅ Background cleared', 'success');
+                console.log('🎨 Live2D background cleared');
+            }
         });
     }
     
@@ -4157,6 +4336,9 @@ function updateAvatarUI(avatarType) {
     // Show/hide 3D Room Environment section (VRM only)
     const vrmEnvironmentSection = document.getElementById('vrmEnvironmentSection');
     
+    // Show/hide Live2D Background section (Live2D only)
+    const live2dBackgroundSection = document.getElementById('live2dBackgroundSection');
+    
     if (avatarType === 'vrm') {
         // Show VRM controls, hide Live2D controls
         if (vrmUploadSection) vrmUploadSection.style.display = 'block';
@@ -4164,8 +4346,9 @@ function updateAvatarUI(avatarType) {
         if (live2dUploadSection) live2dUploadSection.style.display = 'none';
         if (preloadedLive2DSection) preloadedLive2DSection.style.display = 'none';
         
-        // Show 3D environment controls
+        // Show 3D environment controls, hide Live2D background
         if (vrmEnvironmentSection) vrmEnvironmentSection.style.display = 'block';
+        if (live2dBackgroundSection) live2dBackgroundSection.style.display = 'none';
     } else if (avatarType === 'live2d') {
         // Show Live2D controls, hide VRM controls
         if (vrmUploadSection) vrmUploadSection.style.display = 'none';
@@ -4173,8 +4356,9 @@ function updateAvatarUI(avatarType) {
         if (live2dUploadSection) live2dUploadSection.style.display = 'block';
         if (preloadedLive2DSection) preloadedLive2DSection.style.display = 'block';
         
-        // Hide 3D environment controls (Live2D uses simple 2D background)
+        // Hide 3D environment controls, show Live2D background
         if (vrmEnvironmentSection) vrmEnvironmentSection.style.display = 'none';
+        if (live2dBackgroundSection) live2dBackgroundSection.style.display = 'block';
     }
 }
 

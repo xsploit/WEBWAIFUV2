@@ -1208,6 +1208,13 @@ body::after {
     animation: particleGentleFloat 30s ease-in-out infinite;
 }
 
+/* Hide body::after overlay when Live2D is active */
+body.live2d-active::after {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+}
+
 @keyframes particleGentleFloat {
     0%, 100% {
         transform: translateY(0) translateX(0);

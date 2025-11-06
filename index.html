@@ -18,6 +18,23 @@
             }
         }
     </script>
+    
+    <!-- Pixi.js v6 for Live2D (must load before Live2D) -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@6.5.10/dist/browser/pixi.min.js"></script>
+    
+    <!-- Live2D Cubism Core (Cubism 4 runtime) -->
+    <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
+    
+    <!-- pixi-live2d-display (Cubism 4 support for model3.json) -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
+    
+    <!-- Expose PIXI to window (required by pixi-live2d-display) -->
+    <script>
+        if (typeof PIXI !== 'undefined') {
+            window.PIXI = PIXI;
+            console.log('✅ PIXI exposed to window for Live2D');
+        }
+    </script>
 </head>
 <body>
     <!-- Header -->
@@ -35,8 +52,11 @@
         </div>
     </header>
 
-    <!-- Canvas Container for VRM Avatar -->
+    <!-- Canvas Container for VRM Avatar (Three.js) -->
     <div id="canvas-container"></div>
+    
+    <!-- Canvas for Live2D Avatar (Pixi.js) - Hidden by default -->
+    <canvas id="pixi-canvas" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: none; z-index: 0;"></canvas>
 
     <!-- AI Response Bubble -->
     <div class="speech-bubble-overlay" id="speechBubble">
@@ -167,26 +187,63 @@
             <!-- VRM Model Section -->
             <div class="accordion-section">
                 <div class="accordion-header" data-target="vrmSettings">
-                    <span>📁 VRM Model</span>
+                    <span>📁 Avatar Model</span>
                     <span class="accordion-icon">▼</span>
                 </div>
                 <div class="accordion-content" id="vrmSettings">
-                    <div class="file-upload-container">
-                        <input type="file" id="vrmUpload" accept=".vrm" style="display: none;">
-                        <button class="upload-btn" id="uploadVrmBtn">
-                            📁 Upload VRM Model
-                        </button>
-                        <div class="upload-hint">or select from preloaded models</div>
+                    <!-- Avatar Type Selector -->
+                    <div class="control-group">
+                        <label>🎭 Avatar Type</label>
+                        <select id="avatarTypeSelect">
+                            <option value="vrm" selected>VRM (3D Model)</option>
+                            <option value="live2d">Live2D (2D Model)</option>
+                        </select>
+                        <div class="info-hint">
+                            <strong>VRM:</strong> 3D avatars with VRM format<br>
+                            <strong>Live2D:</strong> 2D animated sprites (.model3.json)
+                        </div>
                     </div>
                     
-                    <div class="control-group" style="margin-top: 15px;">
-                        <label>Preloaded Models</label>
+                    <!-- VRM Upload Section -->
+                    <div id="vrmUploadSection">
+                        <div class="file-upload-container">
+                            <input type="file" id="vrmUpload" accept=".vrm" style="display: none;">
+                            <button class="upload-btn" id="uploadVrmBtn">
+                                📁 Upload VRM Model
+                            </button>
+                            <div class="upload-hint">or select from preloaded models</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Live2D Upload Section (hidden by default) -->
+                    <div id="live2dUploadSection" style="display: none;">
+                        <div class="file-upload-container">
+                            <input type="file" id="live2dUpload" accept=".model3.json,.model.json" style="display: none;">
+                            <button class="upload-btn" id="uploadLive2DBtn">
+                                📁 Upload Live2D Model
+                            </button>
+                            <div class="upload-hint">Select .model3.json file</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Preloaded VRM Models -->
+                    <div class="control-group" id="preloadedVRMSection" style="margin-top: 15px;">
+                        <label>Preloaded VRM Models</label>
                         <select id="preloadedModels">
                             <option value="">Choose a model...</option>
                             <option value="assets/models/AvatarSample_H.vrm">Sample Avatar</option>
                             <option value="assets/models/Upgraded_Yumeko_vrm.vrm">Yumeko</option>
                             <option value="assets/models/165071072471339578.vrm">Model 1</option>
                             <option value="assets/models/5936120875254998949.vrm">Model 2</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Preloaded Live2D Models -->
+                    <div class="control-group" id="preloadedLive2DSection" style="margin-top: 15px; display: none;">
+                        <label>Preloaded Live2D Models</label>
+                        <select id="preloadedLive2DModels">
+                            <option value="">Choose a model...</option>
+                            <option value="assets/hiyori/hiyori_pro_jp.model3.json">Hiyori Momose PRO (Neuro-sama)</option>
                         </select>
                     </div>
 
@@ -573,8 +630,8 @@
                 </div>
             </div>
 
-            <!-- Environment Section -->
-            <div class="accordion-section">
+            <!-- Environment Section (VRM Only) -->
+            <div class="accordion-section" id="vrmEnvironmentSection">
                 <div class="accordion-header" data-target="environmentSettings">
                     <span>🏠 3D Room Environment</span>
                     <span class="accordion-icon">▼</span>

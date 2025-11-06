@@ -12,6 +12,7 @@ import { Communicate, VoicesManager } from 'edge-tts-universal';
 import { phonemize } from 'phonemizer';
 import { loadMixamoAnimation } from './loadMixamoAnimation.js';
 import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+import { Live2DManager } from './live2d-manager.js';
 
 // =============================================
 // TRANSFORMERS.JS CONFIGURATION - USE LOCAL MODELS
@@ -195,12 +196,18 @@ const APP_STATE = {
             fishVoiceId: localStorage.getItem('fishVoiceId') || '',
             fishCustomModelId: localStorage.getItem('fishCustomModelId') || '',
             
+            // Avatar Settings
+            avatarType: localStorage.getItem('avatarType') || 'vrm', // 'vrm' or 'live2d'
+            
             // VRM Settings
             currentVrmPath: getSafeVrmPath(),
             avatarPositionY: parseFloat(localStorage.getItem('avatarPositionY') || '0'),
             avatarScale: parseFloat(localStorage.getItem('avatarScale') || '1'),
             autoSnapToFloor: localStorage.getItem('autoSnapToFloor') !== 'false', // Default enabled
             snapToFloor: localStorage.getItem('snapToFloor') !== 'false', // Default true
+            
+            // Live2D Settings
+            currentLive2DPath: localStorage.getItem('currentLive2DPath') || '',
             
             // Room Settings
             roomScale: parseFloat(localStorage.getItem('roomScale') || '1'),
@@ -227,6 +234,9 @@ const APP_STATE = {
 
 // 👁️ Eye Tracking - Global lookAt target (THREE.Object3D for VRM lookAt system)
 let eyeTrackingTarget = null;
+
+// 🎭 Live2D Manager - Initialize globally
+let live2DManager = null;
 
 // Save setting helper
 function saveSetting(key, value) {
@@ -708,13 +718,15 @@ function hideSplashScreen(withCameraReveal = true) {
         setTimeout(() => {
             splash.style.display = 'none';
 
-            // Trigger cinematic camera reveal
-            if (withCameraReveal) {
-                console.log('🎬 VRM loaded?', !!APP_STATE.currentVrm);
+            // Trigger cinematic camera reveal (VRM mode only)
+            if (withCameraReveal && APP_STATE.settings.avatarType === 'vrm') {
+                console.log('🎬 VRM mode - triggering camera reveal');
+                console.log('🎬 VRM loaded?', !!APP_STATE.vrm);
                 console.log('🎬 Camera exists?', !!APP_STATE.camera);
 
-                // ALWAYS trigger camera reveal (even without VRM for testing)
                 cinematicCameraReveal();
+            } else if (APP_STATE.settings.avatarType === 'live2d') {
+                console.log('🎭 Live2D mode - skipping camera reveal (2D rendering)');
             }
         }, 500);
     }
@@ -877,23 +889,28 @@ function animate() {
             APP_STATE.vrm.lookAt.target = eyeTrackingTarget;
         }
 
-        // Update lip sync based on audio
-        if (APP_STATE.isSpeaking && APP_STATE.currentAudio && !APP_STATE.currentAudio.paused && !APP_STATE.currentAudio.ended) {
-            updateLipSync();
-        } else {
-            // Not speaking or audio ended - immediately close mouth
-            if (APP_STATE.vrm?.expressionManager) {
-                const manager = APP_STATE.vrm.expressionManager;
-                if (manager.getExpression('aa')) manager.setValue('aa', 0);
-                if (manager.getExpression('ih')) manager.setValue('ih', 0);
-                if (manager.getExpression('ou')) manager.setValue('ou', 0);
-                previousMouthAmount = 0;
-                previousAa = 0;
-                previousIh = 0;
-                previousOu = 0;
-                cachedPhonemeSegments = null;
-                lastPhonemeString = '';
-            }
+    }
+    
+    // Update lip sync (works for BOTH VRM and Live2D)
+    if (APP_STATE.isSpeaking && APP_STATE.currentAudio && !APP_STATE.currentAudio.paused && !APP_STATE.currentAudio.ended) {
+        updateLipSync();
+    } else {
+        // Not speaking or audio ended - close mouth
+        if (APP_STATE.settings.avatarType === 'vrm' && APP_STATE.vrm?.expressionManager) {
+            // VRM: Close blend shapes
+            const manager = APP_STATE.vrm.expressionManager;
+            if (manager.getExpression('aa')) manager.setValue('aa', 0);
+            if (manager.getExpression('ih')) manager.setValue('ih', 0);
+            if (manager.getExpression('ou')) manager.setValue('ou', 0);
+            previousMouthAmount = 0;
+            previousAa = 0;
+            previousIh = 0;
+            previousOu = 0;
+            cachedPhonemeSegments = null;
+            lastPhonemeString = '';
+        } else if (APP_STATE.settings.avatarType === 'live2d' && live2DManager?.isActive) {
+            // Live2D: Close mouth
+            live2DManager.updateMouthFromAmplitude(0);
         }
     }
     
@@ -1604,14 +1621,20 @@ async function speakText(text) {
     try {
         APP_STATE.isSpeaking = true;
 
+        // Live2D: Disable animations when TTS starts (prevents interference with lip-sync)
+        if (APP_STATE.settings.avatarType === 'live2d' && live2DManager?.isActive) {
+            live2DManager.disableAnimations();
+        }
+
         // Reset mouth state for new audio
         previousAa = 0;
         previousIh = 0;
         previousOu = 0;
         previousMouthAmount = 0;
 
-        // Switch to talking animation
-        playAnimation('talking');
+        // DON'T play talking animation - it interferes with lip-sync!
+        // The real-time lip-sync looks better than baked animation
+        // playAnimation('talking'); // DISABLED - use idle + lip-sync instead
 
         // Ensure mouth is closed initially
         if (APP_STATE.vrm?.expressionManager) {
@@ -1704,6 +1727,11 @@ async function speakText(text) {
                     APP_STATE.vrm.expressionManager.setValue('ou', 0);
                 }
                 
+                // Live2D: Re-enable animations when TTS stops
+                if (APP_STATE.settings.avatarType === 'live2d' && live2DManager?.isActive) {
+                    live2DManager.enableAnimations();
+                }
+                
                 // Switch back to idle animation (ONLY when ALL chunks done)
                 playAnimation('idle');
                 console.log('✅ All audio finished, idle animation started');
@@ -1727,6 +1755,12 @@ async function speakText(text) {
     } catch (error) {
         console.error('TTS error:', error);
         APP_STATE.isSpeaking = false;
+        
+        // Live2D: Re-enable animations on error (TTS stopped)
+        if (APP_STATE.settings.avatarType === 'live2d' && live2DManager?.isActive) {
+            live2DManager.enableAnimations();
+        }
+        
         playAnimation('idle');
         showStatus('❌ TTS error: ' + error.message, 'error');
     }
@@ -1830,6 +1864,16 @@ function getAudioAmplitude() {
 }
 
 function updateLipSync() {
+    // Route to Live2D if in Live2D mode
+    if (APP_STATE.settings.avatarType === 'live2d') {
+        if (live2DManager && live2DManager.isActive && APP_STATE.isSpeaking && APP_STATE.currentAudio) {
+            const amplitude = getAudioAmplitude();
+            live2DManager.updateMouthFromAmplitude(amplitude);
+        }
+        return; // Exit early - don't run VRM code
+    }
+    
+    // VRM Mode - existing code
     if (!APP_STATE.vrm?.expressionManager || !APP_STATE.currentAudio) return;
     
     const manager = APP_STATE.vrm.expressionManager;
@@ -2882,10 +2926,11 @@ function initializeUI() {
     
     uploadVrmBtn.addEventListener('click', () => vrmUpload.click());
     
-    vrmUpload.addEventListener('change', (e) => {
+    vrmUpload.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (file) {
             const url = URL.createObjectURL(file);
+            await switchAvatarType('vrm'); // Switch to VRM mode first
             loadVRM(url);
             saveSetting('currentVrmPath', url);
         }
@@ -2893,8 +2938,9 @@ function initializeUI() {
     
     // Preloaded models
     const preloadedModels = document.getElementById('preloadedModels');
-    preloadedModels.addEventListener('change', (e) => {
+    preloadedModels.addEventListener('change', async (e) => {
         if (e.target.value) {
+            await switchAvatarType('vrm'); // Switch to VRM mode first
             loadVRM(e.target.value);
             saveSetting('currentVrmPath', e.target.value);
         }
@@ -3476,6 +3522,66 @@ function initializeSpeechSettings() {
 }
 
 function setupAvatarControls() {
+    // Avatar Type Selector
+    const avatarTypeSelect = document.getElementById('avatarTypeSelect');
+    if (avatarTypeSelect) {
+        avatarTypeSelect.value = APP_STATE.settings.avatarType;
+        
+        avatarTypeSelect.addEventListener('change', async (e) => {
+            const newType = e.target.value;
+            await switchAvatarType(newType);
+        });
+        
+        // Initialize UI visibility based on current type
+        updateAvatarUI(APP_STATE.settings.avatarType);
+    }
+    
+    // Live2D Upload Button
+    const uploadLive2DBtn = document.getElementById('uploadLive2DBtn');
+    const live2dUpload = document.getElementById('live2dUpload');
+    if (uploadLive2DBtn && live2dUpload) {
+        uploadLive2DBtn.addEventListener('click', () => {
+            live2dUpload.click();
+        });
+        
+        live2dUpload.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file && Live2DManager.isLive2DModel(file)) {
+                try {
+                    console.log('📤 Loading Live2D model:', file.name);
+                    await switchAvatarType('live2d'); // Switch to Live2D mode first
+                    await live2DManager.loadModel(file);
+                    console.log('✅ Live2D model loaded successfully');
+                } catch (error) {
+                    console.error('❌ Failed to load Live2D model:', error);
+                    alert('Failed to load Live2D model. Check console for details.');
+                }
+            } else {
+                alert('Please select a valid Live2D model file (.model3.json)');
+            }
+        });
+    }
+    
+    // Preloaded Live2D Models Selector
+    const preloadedLive2DModels = document.getElementById('preloadedLive2DModels');
+    if (preloadedLive2DModels) {
+        preloadedLive2DModels.addEventListener('change', async (e) => {
+            const modelPath = e.target.value;
+            if (modelPath) {
+                try {
+                    console.log('📥 Loading preloaded Live2D model:', modelPath);
+                    await switchAvatarType('live2d'); // Switch to Live2D mode first
+                    await live2DManager.loadModel(modelPath);
+                    saveSetting('currentLive2DPath', modelPath);
+                    console.log('✅ Preloaded Live2D model loaded');
+                } catch (error) {
+                    console.error('❌ Failed to load preloaded Live2D model:', error);
+                    alert('Failed to load Live2D model. Check console for details.');
+                }
+            }
+        });
+    }
+    
     // Avatar Position Y
     const positionY = document.getElementById('avatarPositionY');
     if (positionY) {
@@ -3980,6 +4086,99 @@ function autoScaleRoom() {
 }
 
 // =============================================
+// Avatar Type Switching Functions
+// =============================================
+async function switchAvatarType(newType) {
+    if (newType === APP_STATE.settings.avatarType) {
+        console.log('✅ Already in', newType, 'mode');
+        return;
+    }
+    
+    console.log(`🔄 Switching from ${APP_STATE.settings.avatarType} to ${newType}`);
+    
+    if (newType === 'vrm') {
+        // Switch to VRM mode
+        if (live2DManager) {
+            live2DManager.hide();
+        }
+        
+        // Show Three.js canvas
+        const canvasContainer = document.getElementById('canvas-container');
+        if (canvasContainer) {
+            canvasContainer.style.display = 'block';
+        }
+        
+        // Trigger cinematic camera reveal if switching to VRM
+        if (APP_STATE.vrm && typeof cinematicCameraReveal === 'function') {
+            cinematicCameraReveal();
+        }
+        
+        console.log('✅ Switched to VRM mode');
+    } else if (newType === 'live2d') {
+        // Switch to Live2D mode
+        
+        // Hide Three.js canvas
+        const canvasContainer = document.getElementById('canvas-container');
+        if (canvasContainer) {
+            canvasContainer.style.display = 'none';
+        }
+        
+        // Show Live2D
+        if (live2DManager) {
+            live2DManager.show();
+        }
+        
+        console.log('✅ Switched to Live2D mode');
+    }
+    
+    // Update state and save
+    APP_STATE.settings.avatarType = newType;
+    saveSetting('avatarType', newType);
+    
+    // Update dropdown selector to match
+    const avatarTypeSelect = document.getElementById('avatarTypeSelect');
+    if (avatarTypeSelect) {
+        avatarTypeSelect.value = newType;
+    }
+    
+    // Update UI
+    updateAvatarUI(newType);
+}
+
+function updateAvatarUI(avatarType) {
+    // Show/hide VRM upload section
+    const vrmUploadSection = document.getElementById('vrmUploadSection');
+    const preloadedVRMSection = document.getElementById('preloadedVRMSection');
+    
+    // Show/hide Live2D upload section
+    const live2dUploadSection = document.getElementById('live2dUploadSection');
+    const preloadedLive2DSection = document.getElementById('preloadedLive2DSection');
+    
+    // Show/hide 3D Room Environment section (VRM only)
+    const vrmEnvironmentSection = document.getElementById('vrmEnvironmentSection');
+    
+    if (avatarType === 'vrm') {
+        // Show VRM controls, hide Live2D controls
+        if (vrmUploadSection) vrmUploadSection.style.display = 'block';
+        if (preloadedVRMSection) preloadedVRMSection.style.display = 'block';
+        if (live2dUploadSection) live2dUploadSection.style.display = 'none';
+        if (preloadedLive2DSection) preloadedLive2DSection.style.display = 'none';
+        
+        // Show 3D environment controls
+        if (vrmEnvironmentSection) vrmEnvironmentSection.style.display = 'block';
+    } else if (avatarType === 'live2d') {
+        // Show Live2D controls, hide VRM controls
+        if (vrmUploadSection) vrmUploadSection.style.display = 'none';
+        if (preloadedVRMSection) preloadedVRMSection.style.display = 'none';
+        if (live2dUploadSection) live2dUploadSection.style.display = 'block';
+        if (preloadedLive2DSection) preloadedLive2DSection.style.display = 'block';
+        
+        // Hide 3D environment controls (Live2D uses simple 2D background)
+        if (vrmEnvironmentSection) vrmEnvironmentSection.style.display = 'none';
+    }
+}
+
+// =============================================
 // Utility Functions
 // =============================================
 function displayAIResponse(text) {
@@ -4034,6 +4233,39 @@ async function init() {
 
     // Initialize Three.js scene
     initThreeJS();
+    
+    // Initialize Live2D Manager
+    try {
+        const pixiCanvas = document.getElementById('pixi-canvas');
+        if (pixiCanvas && typeof PIXI !== 'undefined' && PIXI.live2d) {
+            live2DManager = new Live2DManager();
+            await live2DManager.initPixiApp(pixiCanvas);
+            console.log('✅ Live2D Manager initialized');
+            
+            // If starting in Live2D mode, switch to it immediately
+            if (APP_STATE.settings.avatarType === 'live2d') {
+                console.log('🎭 Starting in Live2D mode');
+                // Hide Three.js canvas, show Pixi canvas
+                const canvasContainer = document.getElementById('canvas-container');
+                if (canvasContainer) canvasContainer.style.display = 'none';
+                live2DManager.show();
+                
+                // Load default Live2D model if saved
+                if (APP_STATE.settings.currentLive2DPath) {
+                    try {
+                        await live2DManager.loadModel(APP_STATE.settings.currentLive2DPath);
+                        console.log('✅ Loaded Live2D model:', APP_STATE.settings.currentLive2DPath);
+                    } catch (error) {
+                        console.log('⚠️ Could not load Live2D model:', error);
+                    }
+                }
+            }
+        } else {
+            console.log('⚠️ Live2D not available (PIXI or libraries not loaded)');
+        }
+    } catch (error) {
+        console.error('⚠️ Live2D initialization failed:', error);
+    }
 
     // Initialize Memory IndexedDB
     try {

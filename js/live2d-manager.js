@@ -14,6 +14,11 @@ export class Live2DManager {
         this.mouthParamIndex = -1;
         this.mouthFlapInterval = null;
         
+        // Store original animation state for re-enabling
+        this._originalMotionUpdate = null;
+        this._originalIdleMotionManager = null;
+        this._motionsDisabled = false;
+        
         // Ensure PIXI is available
         if (typeof window.PIXI === 'undefined') {
             console.error('❌ PIXI not loaded - Live2D will not work');
@@ -89,10 +94,11 @@ export class Live2DManager {
                 this.currentModel = null;
             }
             
-            // Load model (same as hiyori-test.html)
+            // Load model
+            // NOTE: autoInteract DISABLED - it triggers random motions that interfere with lip-sync!
             this.currentModel = await PIXI.live2d.Live2DModel.from(modelPath, {
-                autoInteract: true,
-                autoUpdate: true
+                autoInteract: false, // ✅ Disabled - let lip-sync control mouth
+                autoUpdate: true     // ✅ Keep this - updates model rendering
             });
             
             if (!this.currentModel) {
@@ -123,6 +129,9 @@ export class Live2DManager {
             
             // Add to stage
             this.pixiApp.stage.addChild(this.currentModel);
+            
+            // Initially disable animations (will be re-enabled when TTS stops)
+            this.disableAnimations();
             
             // Find mouth parameter (same as hiyori-test.html)
             this.findMouthParameter();
@@ -218,6 +227,101 @@ export class Live2DManager {
             coreModel.setParameterValueByIndex(this.mouthParamIndex, mouthOpen);
         } catch (error) {
             console.error('❌ Error updating mouth from amplitude:', error);
+        }
+    }
+
+    /**
+     * Reset mouth to neutral position (same as Python version's _relax_mouth_to_neutral)
+     * Forces mouth to fully close
+     */
+    resetMouthToNeutral() {
+        if (!this.currentModel || this.mouthParamIndex === -1) return;
+        
+        try {
+            const coreModel = this.currentModel.internalModel.coreModel;
+            coreModel.setParameterValueByIndex(this.mouthParamIndex, 0.0);
+            console.log('✅ Mouth reset to neutral (closed)');
+        } catch (error) {
+            console.error('❌ Error resetting mouth:', error);
+        }
+    }
+
+    /**
+     * Disable all animations (idle, breathing, etc.) to prevent interference with lip-sync
+     * Called when TTS starts speaking
+     */
+    disableAnimations() {
+        if (!this.currentModel || !this.currentModel.internalModel) return;
+        
+        try {
+            const internalModel = this.currentModel.internalModel;
+            
+            // Method 1: Stop motion manager
+            if (internalModel.motionManager) {
+                internalModel.motionManager.stopAllMotions();
+                console.log('✅ Stopped motion manager');
+            }
+            
+            // Method 2: Save and disable idle motion manager (breathing/idle animations)
+            if (internalModel.idleMotionManager) {
+                this._originalIdleMotionManager = internalModel.idleMotionManager;
+                internalModel.idleMotionManager.stopAllMotions();
+                // Note: We don't set to null anymore - we'll restore it later
+                console.log('✅ Disabled idle motion manager');
+            }
+            
+            // Method 3: Save and disable motion manager's update method
+            if (internalModel.motionManager) {
+                const motionManager = internalModel.motionManager;
+                // Save original update method if not already saved
+                if (!this._originalMotionUpdate) {
+                    this._originalMotionUpdate = motionManager.update.bind(motionManager);
+                }
+                // Override with no-op
+                motionManager.update = () => {}; // No-op
+                console.log('✅ Disabled motion manager update loop');
+            }
+            
+            this._motionsDisabled = true;
+            console.log('✅ All auto-motions disabled for lip-sync');
+        } catch (error) {
+            console.log('⚠️ Could not disable some motions:', error.message);
+        }
+    }
+
+    /**
+     * Re-enable idle animations (breathing, idle motions, etc.)
+     * Called when TTS stops speaking
+     */
+    enableAnimations() {
+        if (!this.currentModel || !this.currentModel.internalModel) return;
+        if (!this._motionsDisabled) return; // Already enabled
+        
+        try {
+            const internalModel = this.currentModel.internalModel;
+            
+            // Method 1: Restore motion manager update method
+            if (internalModel.motionManager && this._originalMotionUpdate) {
+                internalModel.motionManager.update = this._originalMotionUpdate;
+                console.log('✅ Re-enabled motion manager update loop');
+            }
+            
+            // Method 2: Re-enable idle motion manager (if it was saved)
+            // Note: We can't fully restore it if it was nulled, but we can restart idle motions
+            if (internalModel.motionManager && internalModel.groups?.idle) {
+                // Try to start a random idle motion
+                try {
+                    internalModel.motionManager.startRandomMotion(internalModel.groups.idle, 0);
+                    console.log('✅ Re-enabled idle animations');
+                } catch (error) {
+                    console.log('⚠️ Could not restart idle motion (may not be available):', error.message);
+                }
+            }
+            
+            this._motionsDisabled = false;
+            console.log('✅ Animations re-enabled - model will animate naturally');
+        } catch (error) {
+            console.log('⚠️ Could not re-enable some motions:', error.message);
         }
     }
 
@@ -324,6 +428,10 @@ export class Live2DManager {
         if (this.pixiApp && this.pixiApp.view) {
             this.pixiApp.view.style.display = 'none';
             this.isActive = false;
+            
+            // Reset mouth to neutral when hiding (prevent stuck-open mouth)
+            this.resetMouthToNeutral();
+            
             console.log('✅ Live2D mode hidden');
         }
     }

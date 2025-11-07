@@ -292,14 +292,21 @@ function initDOMCache() {
     DOM.maxConversationHistoryValue = document.getElementById('maxConversationHistoryValue');
     DOM.enableLongTermMemory = document.getElementById('enableLongTermMemory');
     DOM.autoSaveInterval = document.getElementById('autoSaveInterval');
+    DOM.enableAutoCleanup = document.getElementById('enableAutoCleanup');
+    DOM.memoryRetentionDays = document.getElementById('memoryRetentionDays');
+    DOM.memoryRetentionDaysValue = document.getElementById('memoryRetentionDaysValue');
+    DOM.minMemoryImportance = document.getElementById('minMemoryImportance');
+    DOM.minMemoryImportanceValue = document.getElementById('minMemoryImportanceValue');
     DOM.saveMemoryBtn = document.getElementById('saveMemoryBtn');
     DOM.exportMemoryBtn = document.getElementById('exportMemoryBtn');
     DOM.importMemoryBtn = document.getElementById('importMemoryBtn');
     DOM.importMemoryFile = document.getElementById('importMemoryFile');
     DOM.clearSessionBtn = document.getElementById('clearSessionBtn');
+    DOM.cleanOldMemoriesBtn = document.getElementById('cleanOldMemoriesBtn');
     DOM.messagesInContext = document.getElementById('messagesInContext');
     DOM.totalStoredMessages = document.getElementById('totalStoredMessages');
     DOM.storageUsed = document.getElementById('storageUsed');
+    DOM.browserQuota = document.getElementById('browserQuota');
     DOM.lastSave = document.getElementById('lastSave');
 
     // Memory System
@@ -316,7 +323,7 @@ function initDOMCache() {
     DOM.resetTTSBtn = document.getElementById('resetTTSBtn');
     DOM.resetAllBtn = document.getElementById('resetAllBtn');
 
-    console.log('✅ DOM Cache initialized - 109 elements cached');
+    console.log('✅ DOM Cache initialized - 115 elements cached');
 }
 
 // Save setting helper - uses SettingsManager utility
@@ -605,11 +612,34 @@ async function updateMemoryStats() {
         DOM.totalStoredMessages.textContent = totalCount;
     }
 
-    // Estimate storage size (rough approximation)
-    const avgMessageSize = 0.001; // ~1KB per message
+    // Estimate IndexedDB size (rough approximation)
+    const avgMessageSize = 0.0025; // ~2.5KB per message (with embedding)
     const storageMB = (totalCount * avgMessageSize).toFixed(2);
     if (DOM.storageUsed) {
         DOM.storageUsed.textContent = `${storageMB} MB`;
+    }
+
+    // Real browser storage quota
+    if (DOM.browserQuota && navigator.storage && navigator.storage.estimate) {
+        try {
+            const estimate = await navigator.storage.estimate();
+            const usedMB = (estimate.usage / 1024 / 1024).toFixed(1);
+            const quotaMB = (estimate.quota / 1024 / 1024).toFixed(0);
+            const percentUsed = ((estimate.usage / estimate.quota) * 100).toFixed(1);
+
+            DOM.browserQuota.textContent = `${usedMB} / ${quotaMB} MB (${percentUsed}%)`;
+
+            // Warn if storage is getting full
+            if (percentUsed > 80) {
+                DOM.browserQuota.style.color = '#ef4444'; // Red
+            } else if (percentUsed > 60) {
+                DOM.browserQuota.style.color = '#f59e0b'; // Orange
+            } else {
+                DOM.browserQuota.style.color = '#10b981'; // Green
+            }
+        } catch (error) {
+            DOM.browserQuota.textContent = 'Not supported';
+        }
     }
 
     // Last save time
@@ -671,6 +701,9 @@ async function saveConversationToMemory() {
         updateMemoryStats();
         console.log('💾 Conversation saved to memory');
         showStatus('💾 Session saved', 'success');
+
+        // Run auto-cleanup if enabled
+        await runAutoCleanupIfEnabled();
     } catch (error) {
         console.error('Save conversation error:', error);
         showStatus('❌ Save failed: ' + error.message, 'error');
@@ -762,6 +795,67 @@ function startAutoSaveTimer() {
         console.log(`⏰ Auto-save enabled (every ${interval / 60000} minutes)`);
     } else {
         console.log('⏰ Auto-save disabled');
+    }
+}
+
+// Clean old memories from IndexedDB
+async function cleanOldMemories() {
+    if (!APP_STATE.memoryDB) {
+        console.warn('⚠️ Memory DB not initialized');
+        return {deleted: 0, kept: 0};
+    }
+
+    try {
+        const cutoffTime = Date.now() - (APP_STATE.settings.memoryRetentionDays * 24 * 60 * 60 * 1000);
+        const minImportance = APP_STATE.settings.minMemoryImportance;
+
+        const transaction = APP_STATE.memoryDB.transaction([MEMORY_STORE_NAME], 'readwrite');
+        const objectStore = transaction.objectStore(MEMORY_STORE_NAME);
+
+        return new Promise((resolve, reject) => {
+            const request = objectStore.getAll();
+
+            request.onsuccess = () => {
+                const memories = request.result;
+                let deleted = 0;
+                let kept = 0;
+
+                memories.forEach(memory => {
+                    const tooOld = memory.timestamp < cutoffTime;
+                    const tooUnimportant = memory.importance < minImportance;
+
+                    if (tooOld || tooUnimportant) {
+                        objectStore.delete(memory.id);
+                        deleted++;
+                    } else {
+                        kept++;
+                    }
+                });
+
+                transaction.oncomplete = () => {
+                    console.log(`🧹 Cleanup complete: Deleted ${deleted}, Kept ${kept}`);
+                    resolve({deleted, kept});
+                };
+
+                transaction.onerror = () => reject(transaction.error);
+            };
+
+            request.onerror = () => reject(request.error);
+        });
+    } catch (error) {
+        console.error('Cleanup error:', error);
+        throw error;
+    }
+}
+
+// Automatically clean if auto-cleanup enabled
+async function runAutoCleanupIfEnabled() {
+    if (APP_STATE.settings.enableAutoCleanup) {
+        console.log('🧹 Running auto-cleanup...');
+        const result = await cleanOldMemories();
+        if (result.deleted > 0) {
+            console.log(`🧹 Auto-cleanup removed ${result.deleted} old/unimportant memories`);
+        }
     }
 }
 
@@ -2791,10 +2885,8 @@ async function sendToAI(message) {
     showStatus('🤖 AI is thinking...', 'loading');
 
     try {
-        // Save user message to memory in background (non-blocking for faster TTS)
-        if (APP_STATE.modelsLoaded) {
-            saveMemory(message, 'user').catch(err => console.warn('Memory save error:', err));
-        }
+        // Note: Messages will be saved via saveConversationToMemory() to avoid duplicates
+        // Individual saves removed to prevent duplicate entries in IndexedDB
 
         // Retrieve relevant memories using semantic search
         let memoryContext = '';
@@ -2823,10 +2915,7 @@ async function sendToAI(message) {
             response = await callLLM(message, false, null, memoryContext);
         }
 
-        // Save assistant response to memory in background (non-blocking)
-        if (APP_STATE.modelsLoaded) {
-            saveMemory(response, 'assistant').catch(err => console.warn('Memory save error:', err));
-        }
+        // Note: Response will be saved via saveConversationToMemory() to avoid duplicates
 
         // Add to conversation history
         APP_STATE.conversationHistory.push(
@@ -4074,6 +4163,68 @@ function setupMemoryControls() {
     if (DOM.clearSessionBtn) {
         DOM.clearSessionBtn.addEventListener('click', () => {
             clearCurrentSession();
+        });
+    }
+
+    // Enable Auto-Cleanup toggle
+    if (DOM.enableAutoCleanup) {
+        DOM.enableAutoCleanup.checked = APP_STATE.settings.enableAutoCleanup;
+        DOM.enableAutoCleanup.addEventListener('change', (e) => {
+            saveSetting('enableAutoCleanup', e.target.checked);
+            console.log(`🧹 Auto-cleanup ${e.target.checked ? 'enabled' : 'disabled'}`);
+        });
+    }
+
+    // Memory Retention Days slider
+    if (DOM.memoryRetentionDays && DOM.memoryRetentionDaysValue) {
+        DOM.memoryRetentionDays.value = APP_STATE.settings.memoryRetentionDays;
+        DOM.memoryRetentionDaysValue.textContent = APP_STATE.settings.memoryRetentionDays;
+
+        DOM.memoryRetentionDays.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            DOM.memoryRetentionDaysValue.textContent = value;
+            saveSetting('memoryRetentionDays', value);
+            console.log(`🗓️ Memory retention set to ${value} days`);
+        });
+    }
+
+    // Minimum Memory Importance slider
+    if (DOM.minMemoryImportance && DOM.minMemoryImportanceValue) {
+        DOM.minMemoryImportance.value = APP_STATE.settings.minMemoryImportance;
+        DOM.minMemoryImportanceValue.textContent = APP_STATE.settings.minMemoryImportance;
+
+        DOM.minMemoryImportance.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            DOM.minMemoryImportanceValue.textContent = value;
+            saveSetting('minMemoryImportance', value);
+            console.log(`⭐ Minimum importance set to ${value}/10`);
+        });
+    }
+
+    // Clean Old Memories Button
+    if (DOM.cleanOldMemoriesBtn) {
+        DOM.cleanOldMemoriesBtn.addEventListener('click', async () => {
+            if (!confirm(`Clean memories older than ${APP_STATE.settings.memoryRetentionDays} days or with importance < ${APP_STATE.settings.minMemoryImportance}?`)) {
+                return;
+            }
+
+            DOM.cleanOldMemoriesBtn.disabled = true;
+            DOM.cleanOldMemoriesBtn.textContent = '⏳ Cleaning...';
+
+            try {
+                const result = await cleanOldMemories();
+                updateMemoryStats();
+                showStatus(`🧹 Deleted ${result.deleted} memories, kept ${result.kept}`, 'success');
+                DOM.cleanOldMemoriesBtn.textContent = '✅ Cleaned!';
+                setTimeout(() => {
+                    DOM.cleanOldMemoriesBtn.textContent = '🧹 Clean Old Memories Now';
+                    DOM.cleanOldMemoriesBtn.disabled = false;
+                }, 2000);
+            } catch (error) {
+                showStatus('❌ Cleanup failed: ' + error.message, 'error');
+                DOM.cleanOldMemoriesBtn.textContent = '🧹 Clean Old Memories Now';
+                DOM.cleanOldMemoriesBtn.disabled = false;
+            }
         });
     }
 

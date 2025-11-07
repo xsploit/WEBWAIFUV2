@@ -710,8 +710,12 @@
                                 <span id="totalStoredMessages" style="color: #10b981; font-weight: 600;">0</span>
                             </div>
                             <div style="display: flex; justify-content: space-between;">
-                                <span>Storage Used:</span>
-                                <span id="storageUsed" style="color: #f59e0b; font-weight: 600;">0 MB</span>
+                                <span>IndexedDB Size:</span>
+                                <span id="storageUsed" style="color: #10b981; font-weight: 600;">0 MB</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span>Browser Quota:</span>
+                                <span id="browserQuota" style="color: #f59e0b; font-weight: 600;">Calculating...</span>
                             </div>
                             <div style="display: flex; justify-content: space-between;">
                                 <span>Last Save:</span>
@@ -760,6 +764,31 @@
                         <div class="range-hint">Automatically save conversations to IndexedDB</div>
                     </div>
 
+                    <!-- IndexedDB Cleanup Settings -->
+                    <div class="tts-info" style="margin-top: 20px; background: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444;">
+                        <p>🧹 <strong>Automatic Cleanup</strong> - Prevent unbounded growth</p>
+                    </div>
+
+                    <div class="control-group">
+                        <label>
+                            <input type="checkbox" id="enableAutoCleanup">
+                            Enable Auto-Cleanup
+                        </label>
+                        <div class="range-hint">Automatically delete old/unimportant memories</div>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Keep Memories For: <span class="range-value" id="memoryRetentionDaysValue">90</span> days</label>
+                        <input type="range" id="memoryRetentionDays" min="7" max="365" step="7" value="90">
+                        <div class="range-hint">Auto-delete memories older than this (when auto-cleanup enabled)</div>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Minimum Importance: <span class="range-value" id="minMemoryImportanceValue">5</span>/10</label>
+                        <input type="range" id="minMemoryImportance" min="1" max="10" step="1" value="5">
+                        <div class="range-hint">Delete memories with importance below this threshold</div>
+                    </div>
+
                     <!-- Memory Action Buttons -->
                     <div class="background-controls" style="display: grid; gap: 10px; margin-top: 20px;">
                         <button class="upload-btn" id="saveMemoryBtn" style="background: linear-gradient(135deg, #10b981, #059669);">
@@ -774,6 +803,9 @@
                         <input type="file" id="importMemoryFile" accept=".json" style="display: none;">
                         <button class="control-btn" id="clearSessionBtn">
                             🗑️ Clear Current Session
+                        </button>
+                        <button class="control-btn" id="cleanOldMemoriesBtn" style="background: rgba(239, 68, 68, 0.15); color: #ef4444;">
+                            🧹 Clean Old Memories Now
                         </button>
                     </div>
                 </div>

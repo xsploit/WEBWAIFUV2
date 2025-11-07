@@ -200,6 +200,9 @@ export class SettingsManager {
             maxConversationHistory: this.get('maxConversationHistory', 50, 'int'),
             enableLongTermMemory: this.get('enableLongTermMemory', true, 'bool'),
             autoSaveInterval: this.get('autoSaveInterval', 0, 'int'), // 0 = off
+            enableAutoCleanup: this.get('enableAutoCleanup', false, 'bool-inverse'),
+            memoryRetentionDays: this.get('memoryRetentionDays', 90, 'int'),
+            minMemoryImportance: this.get('minMemoryImportance', 5, 'int'),
 
             // Eye Tracking
             enableEyeTracking: this.get('enableEyeTracking', true, 'bool')

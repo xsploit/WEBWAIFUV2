@@ -622,7 +622,7 @@ async function updateMemoryStats() {
             } else if (minutes === 1) {
                 DOM.lastSave.textContent = '1 minute ago';
             } else {
-                DOM.lastSave.textContent = `${minutes} minutes ago';
+                DOM.lastSave.textContent = `${minutes} minutes ago`;
             }
         } else {
             DOM.lastSave.textContent = 'Never';

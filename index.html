@@ -59,12 +59,17 @@
     <canvas id="pixi-canvas" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: none; z-index: 10; background: #000; pointer-events: auto;"></canvas>
 
     <!-- AI Response Bubble -->
-    <div class="speech-bubble-overlay" id="speechBubble">
+    <div class="speech-bubble-overlay" id="speechBubble" style="display: none;">
         <div class="speech-overlay-content">
             <div class="ai-response-text" id="aiResponse">
                 Welcome! I'm your AI companion. Start chatting with me! 💖
             </div>
         </div>
+    </div>
+
+    <!-- Live Subtitles -->
+    <div class="live-subtitles" id="liveSubtitles" style="display: none;">
+        <div class="subtitle-text" id="subtitleText"></div>
     </div>
 
     <!-- Chat Input -->
@@ -543,23 +548,8 @@
                             <div class="range-hint">Override dropdown - paste any Fish Audio model ID</div>
                         </div>
                         
-                        <div class="control-group">
-                            <label>Rate: <span class="range-value" id="ttsRateValue">0%</span></label>
-                            <input type="range" id="ttsRate" min="-50" max="100" value="0" step="10">
-                            <div class="range-hint">Speech speed (reused from Edge TTS settings)</div>
-                        </div>
-
-                        <div class="control-group">
-                            <label>Volume: <span class="range-value" id="ttsVolumeValue">0%</span></label>
-                            <input type="range" id="ttsVolume" min="-50" max="50" value="0" step="10">
-                            <div class="range-hint">Speech volume (reused from Edge TTS settings)</div>
-                        </div>
-
-                        <div class="control-group">
-                            <label>
-                                <input type="checkbox" id="ttsAutoPlay" checked>
-                                Auto-play AI responses
-                            </label>
+                        <div class="tts-info" style="background: rgba(255, 193, 7, 0.1); border-left: 3px solid #ffc107;">
+                            <p>ℹ️ <strong>Note:</strong> Rate and Volume controls are shared with Edge TTS settings above</p>
                         </div>
                         
                         <button class="upload-btn" id="testFishTtsBtn" style="width: 100%; margin-top: 10px; background: linear-gradient(135deg, #3b82f6, #10b981);">
@@ -657,6 +647,41 @@
                             <input type="checkbox" id="continuousRecognition">
                             Continuous Recognition (experimental)
                         </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Display & Subtitles Section -->
+            <div class="accordion-section">
+                <div class="accordion-header" data-target="displaySettings">
+                    <span>💬 Display & Subtitles</span>
+                    <span class="accordion-icon">▼</span>
+                </div>
+                <div class="accordion-content" id="displaySettings">
+                    <div class="tts-info">
+                        <p>💬 Control how AI responses are displayed</p>
+                    </div>
+
+                    <div class="control-group">
+                        <label>
+                            <input type="checkbox" id="showSpeechBubble" checked>
+                            Show Speech Bubble
+                        </label>
+                        <div class="range-hint">Display full response in bubble overlay</div>
+                    </div>
+
+                    <div class="control-group">
+                        <label>
+                            <input type="checkbox" id="showLiveSubtitles" checked>
+                            Enable Live Subtitles
+                        </label>
+                        <div class="range-hint">Word-by-word subtitles synced with speech</div>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Subtitle Duration: <span class="range-value" id="subtitleDurationValue">3.0</span>s</label>
+                        <input type="range" id="subtitleDuration" min="1" max="10" step="0.5" value="3">
+                        <div class="range-hint">How long subtitles stay visible after speech</div>
                     </div>
                 </div>
             </div>

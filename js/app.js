@@ -131,7 +131,6 @@ const APP_STATE = {
     conversationHistory: [],
     isProcessing: false,
     requestQueue: [],
-    isSpeaking: false,
     speechQueue: [],
     currentAudio: null,
     currentPhonemes: [],
@@ -171,6 +170,8 @@ function initDOMCache() {
     DOM.pixiCanvas = document.getElementById('pixi-canvas');
     DOM.speechBubble = document.getElementById('speechBubble');
     DOM.statusIndicator = document.getElementById('statusIndicator');
+    DOM.liveSubtitles = document.getElementById('liveSubtitles');
+    DOM.subtitleText = document.getElementById('subtitleText');
 
     // Settings Panel
     DOM.settingsBtn = document.getElementById('settingsBtn');
@@ -279,6 +280,12 @@ function initDOMCache() {
     // Eye Tracking
     DOM.enableEyeTracking = document.getElementById('enableEyeTracking');
 
+    // Display & Subtitles
+    DOM.showSpeechBubble = document.getElementById('showSpeechBubble');
+    DOM.showLiveSubtitles = document.getElementById('showLiveSubtitles');
+    DOM.subtitleDuration = document.getElementById('subtitleDuration');
+    DOM.subtitleDurationValue = document.getElementById('subtitleDurationValue');
+
     // Memory System
     DOM.initMemoryBtn = document.getElementById('initMemoryBtn');
     DOM.clearMemoriesBtn = document.getElementById('clearMemoriesBtn');
@@ -293,7 +300,7 @@ function initDOMCache() {
     DOM.resetTTSBtn = document.getElementById('resetTTSBtn');
     DOM.resetAllBtn = document.getElementById('resetAllBtn');
 
-    console.log('✅ DOM Cache initialized - 91 elements cached');
+    console.log('✅ DOM Cache initialized - 95 elements cached');
 }
 
 // Save setting helper - uses SettingsManager utility
@@ -1026,6 +1033,7 @@ function animate() {
     // Update lip sync (works for BOTH VRM and Live2D)
     if (APP_STATE.isSpeaking && APP_STATE.currentAudio && !APP_STATE.currentAudio.paused && !APP_STATE.currentAudio.ended) {
         updateLipSync();
+        updateLiveSubtitles(); // Update live subtitles during speech
     } else {
         // Not speaking or audio ended - close mouth
         if (APP_STATE.settings.avatarType === 'vrm' && APP_STATE.vrm?.expressionManager) {
@@ -1883,6 +1891,10 @@ async function speakText(text) {
                 // Switch back to idle animation (ONLY when ALL chunks done)
                 playAnimation('idle');
                 console.log('✅ All audio finished, idle animation started');
+
+                // Hide speech bubble and subtitles when speech ends
+                hideSpeechBubble();
+                hideLiveSubtitles();
             }
         };
 
@@ -1911,6 +1923,10 @@ async function speakText(text) {
         
         playAnimation('idle');
         showStatus('❌ TTS error: ' + error.message, 'error');
+
+        // Hide speech bubble and subtitles on error
+        hideSpeechBubble();
+        hideLiveSubtitles();
     }
 }
 
@@ -3035,18 +3051,20 @@ function updateVRMMovement() {
 // UI Event Handlers
 // =============================================
 function initializeUI() {
-    // Settings panel
-    const settingsBtn = document.getElementById('settingsBtn');
-    const settingsPanel = document.getElementById('settingsPanel');
-    const closeSettings = document.getElementById('closeSettings');
-    
-    settingsBtn.addEventListener('click', () => {
-        settingsPanel.classList.add('show');
-    });
-    
-    closeSettings.addEventListener('click', () => {
-        settingsPanel.classList.remove('show');
-    });
+    // Settings panel - using DOM cache
+    const settingsBtn = DOM.settingsBtn;
+    const settingsPanel = DOM.settingsPanel;
+    const closeSettings = DOM.closeSettings;
+
+    if (settingsBtn && settingsPanel && closeSettings) {
+        settingsBtn.addEventListener('click', () => {
+            settingsPanel.classList.add('show');
+        });
+
+        closeSettings.addEventListener('click', () => {
+            settingsPanel.classList.remove('show');
+        });
+    }
     
     // Accordion sections
     document.querySelectorAll('.accordion-header').forEach(header => {
@@ -3066,29 +3084,32 @@ function initializeUI() {
         });
     });
     
-    // Chat input
-    const chatInput = document.getElementById('chatInput');
-    const sendBtn = document.getElementById('sendBtn');
-    
-    sendBtn.addEventListener('click', () => {
-        const message = chatInput.value.trim();
-        if (message) {
-            sendToAI(message);
-            chatInput.value = '';
-        }
-    });
-    
-    chatInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendBtn.click();
-        }
-    });
-    
-    // Voice button - Using Whisper AI
-    const voiceBtn = document.getElementById('voiceBtn');
+    // Chat input - using DOM cache
+    const chatInput = DOM.chatInput;
+    const sendBtn = DOM.sendBtn;
 
-    voiceBtn.addEventListener('click', async () => {
+    if (sendBtn && chatInput) {
+        sendBtn.addEventListener('click', () => {
+            const message = chatInput.value.trim();
+            if (message) {
+                sendToAI(message);
+                chatInput.value = '';
+            }
+        });
+
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendBtn.click();
+            }
+        });
+    }
+
+    // Voice button - Using Whisper AI - using DOM cache
+    const voiceBtn = DOM.voiceBtn;
+
+    if (voiceBtn) {
+        voiceBtn.addEventListener('click', async () => {
         if (!whisperWorker) {
             showStatus('❌ Whisper not loaded yet', 'error');
             return;
@@ -3119,42 +3140,47 @@ function initializeUI() {
             }
         }
     });
+    }
 
     document.addEventListener('keyup', (e) => {
         if (e.key === APP_STATE.settings.voiceHotkey && APP_STATE.isListening) {
             if (document.activeElement !== chatInput) {
                 e.preventDefault();
-                voiceBtn.click(); // Stop recording and transcribe
+                if (voiceBtn) voiceBtn.click(); // Stop recording and transcribe
             }
         }
     });
+
+    // VRM upload - using DOM cache
+    const uploadVrmBtn = DOM.uploadVrmBtn;
+    const vrmUpload = DOM.vrmUpload;
+
+    if (uploadVrmBtn && vrmUpload) {
+        uploadVrmBtn.addEventListener('click', () => vrmUpload.click());
     
-    // VRM upload
-    const uploadVrmBtn = document.getElementById('uploadVrmBtn');
-    const vrmUpload = document.getElementById('vrmUpload');
-    
-    uploadVrmBtn.addEventListener('click', () => vrmUpload.click());
-    
-    vrmUpload.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const url = URL.createObjectURL(file);
-            await switchAvatarType('vrm'); // Switch to VRM mode first
-            loadVRM(url);
-            saveSetting('currentVrmPath', url);
-        }
-    });
-    
-    // Preloaded models
-    const preloadedModels = document.getElementById('preloadedModels');
-    preloadedModels.addEventListener('change', async (e) => {
+        vrmUpload.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const url = URL.createObjectURL(file);
+                await switchAvatarType('vrm'); // Switch to VRM mode first
+                loadVRM(url);
+                saveSetting('currentVrmPath', url);
+            }
+        });
+    }
+
+    // Preloaded models - using DOM cache
+    const preloadedModels = DOM.preloadedModels;
+    if (preloadedModels) {
+        preloadedModels.addEventListener('change', async (e) => {
         if (e.target.value) {
             await switchAvatarType('vrm'); // Switch to VRM mode first
             loadVRM(e.target.value);
             saveSetting('currentVrmPath', e.target.value);
         }
-    });
-    
+        });
+    }
+
     // Snap to Floor checkbox
     const snapToFloorCheckbox = document.getElementById('snapToFloor');
     if (snapToFloorCheckbox) {
@@ -3195,8 +3221,9 @@ function initializeUI() {
     setupTTSControls();
     setupAvatarControls();
     setupAnimationControls();
+    setupDisplayControls();
     setupPasswordToggles();
-    
+
     // Setup keyboard controls last
     setupKeyboardControls();
     
@@ -3353,16 +3380,16 @@ function setupLLMControls() {
     Object.entries(apiKeyMappings).forEach(([inputId, settingKey]) => {
         const input = document.getElementById(inputId);
         if (input) {
-            // Load saved value based on current provider
+            // Load saved value based on current provider using SettingsManager
             if (inputId === 'ollamaUrl') {
-                input.value = localStorage.getItem('ollamaUrl') || 'http://localhost:11434';
+                input.value = SettingsManager.get('ollamaUrl', 'http://localhost:11434');
             } else {
-                const savedKey = localStorage.getItem(`${inputId}`);
+                const savedKey = SettingsManager.get(inputId, '');
                 if (savedKey) input.value = savedKey;
             }
             
             input.addEventListener('change', (e) => {
-                localStorage.setItem(inputId, e.target.value);
+                SettingsManager.set(inputId, e.target.value, APP_STATE.settings);
                 if (settingKey === 'llmApiKey') {
                     APP_STATE.settings.llmApiKey = e.target.value;
                 }
@@ -3370,11 +3397,10 @@ function setupLLMControls() {
         }
     });
     
-    // System prompt (general instructions)
-    const systemPrompt = document.getElementById('systemPrompt');
-    if (systemPrompt) {
-        systemPrompt.value = APP_STATE.settings.systemPrompt;
-        systemPrompt.addEventListener('change', (e) => {
+    // System prompt (general instructions) - use DOM cache
+    if (DOM.systemPrompt) {
+        DOM.systemPrompt.value = APP_STATE.settings.systemPrompt;
+        DOM.systemPrompt.addEventListener('change', (e) => {
             saveSetting('systemPrompt', e.target.value);
         });
     }
@@ -3719,6 +3745,52 @@ function initializeSpeechSettings() {
         navigator.mediaDevices.addEventListener('devicechange', () => {
             console.log('🎤 Audio devices changed, re-enumerating...');
             enumerateAudioDevices();
+        });
+    }
+}
+
+function setupDisplayControls() {
+    // Speech Bubble toggle
+    if (DOM.showSpeechBubble) {
+        DOM.showSpeechBubble.checked = APP_STATE.settings.showSpeechBubble;
+        DOM.showSpeechBubble.addEventListener('change', (e) => {
+            saveSetting('showSpeechBubble', e.target.checked);
+            console.log(`💬 Speech bubble ${e.target.checked ? 'enabled' : 'disabled'}`);
+
+            // Hide speech bubble immediately if disabled
+            if (!e.target.checked) {
+                hideSpeechBubble();
+            }
+        });
+    }
+
+    // Live Subtitles toggle
+    if (DOM.showLiveSubtitles) {
+        DOM.showLiveSubtitles.checked = APP_STATE.settings.showLiveSubtitles;
+        DOM.showLiveSubtitles.addEventListener('change', (e) => {
+            saveSetting('showLiveSubtitles', e.target.checked);
+            console.log(`📝 Live subtitles ${e.target.checked ? 'enabled' : 'disabled'}`);
+
+            // Hide subtitles immediately if disabled
+            if (!e.target.checked) {
+                if (DOM.liveSubtitles) {
+                    DOM.liveSubtitles.classList.remove('show');
+                    DOM.liveSubtitles.style.display = 'none';
+                }
+            }
+        });
+    }
+
+    // Subtitle Duration slider
+    if (DOM.subtitleDuration && DOM.subtitleDurationValue) {
+        DOM.subtitleDuration.value = APP_STATE.settings.subtitleDuration;
+        DOM.subtitleDurationValue.textContent = APP_STATE.settings.subtitleDuration.toFixed(1);
+
+        DOM.subtitleDuration.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            DOM.subtitleDurationValue.textContent = value.toFixed(1);
+            saveSetting('subtitleDuration', value);
+            console.log(`⏱️ Subtitle duration set to ${value}s`);
         });
     }
 }
@@ -4413,15 +4485,100 @@ function updateAvatarUI(avatarType) {
 // Utility Functions
 // =============================================
 function displayAIResponse(text) {
-    const responseElement = document.getElementById('aiResponse');
-    responseElement.textContent = text;
-    
-    const bubble = document.getElementById('speechBubble');
-    bubble.style.display = 'block';
+    DOM.aiResponse.textContent = text;
+
+    // Only show speech bubble if enabled in settings
+    if (APP_STATE.settings.showSpeechBubble) {
+        DOM.speechBubble.style.display = 'block';
+    }
+}
+
+// Hide speech bubble (called when speech ends)
+function hideSpeechBubble() {
+    if (DOM.speechBubble) {
+        DOM.speechBubble.style.display = 'none';
+    }
+}
+
+// Show live subtitles word-by-word
+let subtitleTimeoutId = null;
+function showLiveSubtitles(text) {
+    if (!APP_STATE.settings.showLiveSubtitles || !DOM.liveSubtitles || !DOM.subtitleText) {
+        return;
+    }
+
+    // Clear any existing timeout
+    if (subtitleTimeoutId) {
+        clearTimeout(subtitleTimeoutId);
+        subtitleTimeoutId = null;
+    }
+
+    // Update subtitle text
+    DOM.subtitleText.textContent = text;
+
+    // Show subtitles with fade-in
+    DOM.liveSubtitles.classList.add('show');
+    DOM.liveSubtitles.style.display = 'block';
+}
+
+// Hide live subtitles after duration
+function hideLiveSubtitles() {
+    if (!DOM.liveSubtitles) return;
+
+    // Clear any existing timeout
+    if (subtitleTimeoutId) {
+        clearTimeout(subtitleTimeoutId);
+        subtitleTimeoutId = null;
+    }
+
+    // Wait for subtitle duration before hiding
+    const duration = APP_STATE.settings.subtitleDuration * 1000;
+    subtitleTimeoutId = setTimeout(() => {
+        if (DOM.liveSubtitles) {
+            DOM.liveSubtitles.classList.remove('show');
+            setTimeout(() => {
+                if (DOM.liveSubtitles) {
+                    DOM.liveSubtitles.style.display = 'none';
+                }
+            }, 300); // Wait for fade-out animation
+        }
+    }, duration);
+}
+
+// Update live subtitles based on word boundaries (called during playback)
+function updateLiveSubtitles() {
+    if (!APP_STATE.settings.showLiveSubtitles || !APP_STATE.isSpeaking) {
+        return;
+    }
+
+    if (!APP_STATE.currentAudio || !APP_STATE.wordBoundaries || APP_STATE.wordBoundaries.length === 0) {
+        return;
+    }
+
+    const currentTime = APP_STATE.currentAudio.currentTime * 1000; // Convert to milliseconds
+
+    // Find the current word being spoken
+    let currentWords = [];
+    for (let i = 0; i < APP_STATE.wordBoundaries.length; i++) {
+        const boundary = APP_STATE.wordBoundaries[i];
+
+        // Show words that are currently being spoken (with a small buffer)
+        if (boundary.time <= currentTime && currentTime < boundary.time + 500) {
+            currentWords.push(boundary.text);
+        }
+    }
+
+    // Show up to 10 words at a time for readability
+    if (currentWords.length > 0) {
+        const displayText = currentWords.slice(0, 10).join(' ');
+        showLiveSubtitles(displayText);
+    }
 }
 
 function showStatus(message, type = 'loading') {
-    const indicator = document.getElementById('statusIndicator');
+    const indicator = DOM.statusIndicator;
+    if (!indicator) return;
+
     const icon = indicator.querySelector('.status-icon');
     const text = indicator.querySelector('.status-text');
     
@@ -4444,15 +4601,16 @@ function showStatus(message, type = 'loading') {
 }
 
 function showLoading(message) {
-    const loading = document.getElementById('loadingScreen');
-    const loadingText = document.getElementById('loadingText');
-    loadingText.textContent = message;
-    loading.classList.add('show');
+    if (DOM.loadingScreen && DOM.loadingText) {
+        DOM.loadingText.textContent = message;
+        DOM.loadingScreen.classList.add('show');
+    }
 }
 
 function hideLoading() {
-    const loading = document.getElementById('loadingScreen');
-    loading.classList.remove('show');
+    if (DOM.loadingScreen) {
+        DOM.loadingScreen.classList.remove('show');
+    }
 }
 
 // =============================================

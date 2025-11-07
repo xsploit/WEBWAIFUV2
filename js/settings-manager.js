@@ -190,6 +190,11 @@ export class SettingsManager {
             continuousRecognition: this.get('continuousRecognition', false, 'bool-inverse'),
             microphoneDeviceId: this.get('microphoneDeviceId', ''),
 
+            // Display & Subtitles
+            showSpeechBubble: this.get('showSpeechBubble', true, 'bool'),
+            showLiveSubtitles: this.get('showLiveSubtitles', true, 'bool'),
+            subtitleDuration: this.get('subtitleDuration', 3, 'float'),
+
             // Eye Tracking
             enableEyeTracking: this.get('enableEyeTracking', true, 'bool')
         };

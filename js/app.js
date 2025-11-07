@@ -286,6 +286,22 @@ function initDOMCache() {
     DOM.subtitleDuration = document.getElementById('subtitleDuration');
     DOM.subtitleDurationValue = document.getElementById('subtitleDurationValue');
 
+    // Memory Management
+    DOM.memoryMode = document.getElementById('memoryMode');
+    DOM.maxConversationHistory = document.getElementById('maxConversationHistory');
+    DOM.maxConversationHistoryValue = document.getElementById('maxConversationHistoryValue');
+    DOM.enableLongTermMemory = document.getElementById('enableLongTermMemory');
+    DOM.autoSaveInterval = document.getElementById('autoSaveInterval');
+    DOM.saveMemoryBtn = document.getElementById('saveMemoryBtn');
+    DOM.exportMemoryBtn = document.getElementById('exportMemoryBtn');
+    DOM.importMemoryBtn = document.getElementById('importMemoryBtn');
+    DOM.importMemoryFile = document.getElementById('importMemoryFile');
+    DOM.clearSessionBtn = document.getElementById('clearSessionBtn');
+    DOM.messagesInContext = document.getElementById('messagesInContext');
+    DOM.totalStoredMessages = document.getElementById('totalStoredMessages');
+    DOM.storageUsed = document.getElementById('storageUsed');
+    DOM.lastSave = document.getElementById('lastSave');
+
     // Memory System
     DOM.initMemoryBtn = document.getElementById('initMemoryBtn');
     DOM.clearMemoriesBtn = document.getElementById('clearMemoriesBtn');
@@ -300,7 +316,7 @@ function initDOMCache() {
     DOM.resetTTSBtn = document.getElementById('resetTTSBtn');
     DOM.resetAllBtn = document.getElementById('resetAllBtn');
 
-    console.log('✅ DOM Cache initialized - 95 elements cached');
+    console.log('✅ DOM Cache initialized - 109 elements cached');
 }
 
 // Save setting helper - uses SettingsManager utility
@@ -564,6 +580,189 @@ async function clearAllMemories() {
         };
         request.onerror = () => resolve();
     });
+}
+
+// =============================================
+// Memory Management Functions
+// =============================================
+
+// Track last save timestamp
+let lastMemorySaveTime = null;
+let autoSaveTimerId = null;
+
+// Update memory stats display
+async function updateMemoryStats() {
+    if (!DOM.messagesInContext) return;
+
+    // Messages in context
+    const contextCount = APP_STATE.conversationHistory.length;
+    const maxContext = APP_STATE.settings.maxConversationHistory;
+    DOM.messagesInContext.textContent = `${contextCount} / ${maxContext}`;
+
+    // Total stored messages in IndexedDB
+    const totalCount = await getMemoryCount();
+    if (DOM.totalStoredMessages) {
+        DOM.totalStoredMessages.textContent = totalCount;
+    }
+
+    // Estimate storage size (rough approximation)
+    const avgMessageSize = 0.001; // ~1KB per message
+    const storageMB = (totalCount * avgMessageSize).toFixed(2);
+    if (DOM.storageUsed) {
+        DOM.storageUsed.textContent = `${storageMB} MB`;
+    }
+
+    // Last save time
+    if (DOM.lastSave) {
+        if (lastMemorySaveTime) {
+            const elapsed = Date.now() - lastMemorySaveTime;
+            const minutes = Math.floor(elapsed / 60000);
+            if (minutes === 0) {
+                DOM.lastSave.textContent = 'Just now';
+            } else if (minutes === 1) {
+                DOM.lastSave.textContent = '1 minute ago';
+            } else {
+                DOM.lastSave.textContent = `${minutes} minutes ago';
+            }
+        } else {
+            DOM.lastSave.textContent = 'Never';
+        }
+    }
+}
+
+// Prune conversation history to stay within max limit
+function pruneConversationHistory() {
+    if (APP_STATE.settings.memoryMode !== 'auto-prune') {
+        return; // Only prune in auto-prune mode
+    }
+
+    const maxMessages = APP_STATE.settings.maxConversationHistory;
+    const currentCount = APP_STATE.conversationHistory.length;
+
+    if (currentCount > maxMessages) {
+        const toRemove = currentCount - maxMessages;
+        APP_STATE.conversationHistory.splice(0, toRemove);
+        console.log(`🧹 Pruned ${toRemove} old messages from context (keeping last ${maxMessages})`);
+    }
+}
+
+// Save current conversation to IndexedDB
+async function saveConversationToMemory() {
+    if (!APP_STATE.settings.enableLongTermMemory) {
+        console.log('💾 Long-term memory disabled, skipping save');
+        return;
+    }
+
+    if (!APP_STATE.memoryDB || !APP_STATE.modelsLoaded) {
+        console.log('💾 Memory system not ready, skipping save');
+        return;
+    }
+
+    try {
+        // Save each message in conversation history that hasn't been saved yet
+        for (const message of APP_STATE.conversationHistory) {
+            if (!message.saved) {
+                await saveMemory(message.content, message.role);
+                message.saved = true; // Mark as saved to avoid duplicates
+            }
+        }
+
+        lastMemorySaveTime = Date.now();
+        updateMemoryStats();
+        console.log('💾 Conversation saved to memory');
+        showStatus('💾 Session saved', 'success');
+    } catch (error) {
+        console.error('Save conversation error:', error);
+        showStatus('❌ Save failed: ' + error.message, 'error');
+    }
+}
+
+// Export conversation as JSON file
+function exportConversationAsJSON() {
+    try {
+        const exportData = {
+            conversationHistory: APP_STATE.conversationHistory,
+            settings: {
+                characterName: APP_STATE.settings.characterName,
+                userName: APP_STATE.settings.userName
+            },
+            exportDate: new Date().toISOString(),
+            messageCount: APP_STATE.conversationHistory.length
+        };
+
+        const jsonStr = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `conversation_${Date.now()}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showStatus('📤 Conversation exported', 'success');
+        console.log('📤 Conversation exported as JSON');
+    } catch (error) {
+        console.error('Export error:', error);
+        showStatus('❌ Export failed: ' + error.message, 'error');
+    }
+}
+
+// Import conversation from JSON file
+function importConversationFromJSON(file) {
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const data = JSON.parse(e.target.result);
+
+            if (!data.conversationHistory || !Array.isArray(data.conversationHistory)) {
+                throw new Error('Invalid conversation file format');
+            }
+
+            APP_STATE.conversationHistory = data.conversationHistory;
+            console.log(`📥 Imported ${data.conversationHistory.length} messages from ${data.exportDate}`);
+            showStatus(`📥 Imported ${data.conversationHistory.length} messages`, 'success');
+            updateMemoryStats();
+        } catch (error) {
+            console.error('Import error:', error);
+            showStatus('❌ Import failed: ' + error.message, 'error');
+        }
+    };
+
+    reader.readAsText(file);
+}
+
+// Clear current session (conversation history only)
+function clearCurrentSession() {
+    if (confirm('Clear current conversation session? (Long-term memory will be preserved)')) {
+        APP_STATE.conversationHistory = [];
+        console.log('🗑️ Current session cleared');
+        showStatus('🗑️ Session cleared', 'success');
+        updateMemoryStats();
+    }
+}
+
+// Start auto-save timer
+function startAutoSaveTimer() {
+    // Clear existing timer
+    if (autoSaveTimerId) {
+        clearInterval(autoSaveTimerId);
+        autoSaveTimerId = null;
+    }
+
+    const interval = APP_STATE.settings.autoSaveInterval;
+    if (interval > 0) {
+        autoSaveTimerId = setInterval(() => {
+            saveConversationToMemory();
+        }, interval);
+        console.log(`⏰ Auto-save enabled (every ${interval / 60000} minutes)`);
+    } else {
+        console.log('⏰ Auto-save disabled');
+    }
 }
 
 // =============================================
@@ -2631,14 +2830,12 @@ async function sendToAI(message) {
 
         // Add to conversation history
         APP_STATE.conversationHistory.push(
-            { role: 'user', content: message },
-            { role: 'assistant', content: response }
+            { role: 'user', content: message, saved: false },
+            { role: 'assistant', content: response, saved: false }
         );
 
-        // Keep history reasonable (last 20 messages)
-        if (APP_STATE.conversationHistory.length > 20) {
-            APP_STATE.conversationHistory = APP_STATE.conversationHistory.slice(-20);
-        }
+        // Prune conversation history based on memory settings
+        pruneConversationHistory();
 
         // Display response
         displayAIResponse(response);
@@ -3222,6 +3419,7 @@ function initializeUI() {
     setupAvatarControls();
     setupAnimationControls();
     setupDisplayControls();
+    setupMemoryControls();
     setupPasswordToggles();
 
     // Setup keyboard controls last
@@ -3791,6 +3989,98 @@ function setupDisplayControls() {
             DOM.subtitleDurationValue.textContent = value.toFixed(1);
             saveSetting('subtitleDuration', value);
             console.log(`⏱️ Subtitle duration set to ${value}s`);
+        });
+    }
+}
+
+function setupMemoryControls() {
+    // Memory Mode selector
+    if (DOM.memoryMode) {
+        DOM.memoryMode.value = APP_STATE.settings.memoryMode;
+        DOM.memoryMode.addEventListener('change', (e) => {
+            saveSetting('memoryMode', e.target.value);
+            console.log(`🧠 Memory mode set to ${e.target.value}`);
+        });
+    }
+
+    // Max Conversation History slider
+    if (DOM.maxConversationHistory && DOM.maxConversationHistoryValue) {
+        DOM.maxConversationHistory.value = APP_STATE.settings.maxConversationHistory;
+        DOM.maxConversationHistoryValue.textContent = APP_STATE.settings.maxConversationHistory;
+
+        DOM.maxConversationHistory.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            DOM.maxConversationHistoryValue.textContent = value;
+            saveSetting('maxConversationHistory', value);
+            console.log(`🧠 Max context messages set to ${value}`);
+        });
+    }
+
+    // Enable Long-term Memory toggle
+    if (DOM.enableLongTermMemory) {
+        DOM.enableLongTermMemory.checked = APP_STATE.settings.enableLongTermMemory;
+        DOM.enableLongTermMemory.addEventListener('change', (e) => {
+            saveSetting('enableLongTermMemory', e.target.checked);
+            console.log(`💾 Long-term memory ${e.target.checked ? 'enabled' : 'disabled'}`);
+        });
+    }
+
+    // Auto-save Interval selector
+    if (DOM.autoSaveInterval) {
+        DOM.autoSaveInterval.value = APP_STATE.settings.autoSaveInterval;
+        DOM.autoSaveInterval.addEventListener('change', (e) => {
+            const value = parseInt(e.target.value);
+            saveSetting('autoSaveInterval', value);
+            startAutoSaveTimer(); // Restart timer with new interval
+            const label = value === 0 ? 'Off' : `Every ${value / 60000} minutes`;
+            console.log(`⏰ Auto-save set to: ${label}`);
+        });
+    }
+
+    // Save Memory Button
+    if (DOM.saveMemoryBtn) {
+        DOM.saveMemoryBtn.addEventListener('click', async () => {
+            DOM.saveMemoryBtn.disabled = true;
+            DOM.saveMemoryBtn.textContent = '⏳ Saving...';
+            await saveConversationToMemory();
+            DOM.saveMemoryBtn.textContent = '💾 Save Session Now';
+            DOM.saveMemoryBtn.disabled = false;
+        });
+    }
+
+    // Export Memory Button
+    if (DOM.exportMemoryBtn) {
+        DOM.exportMemoryBtn.addEventListener('click', () => {
+            exportConversationAsJSON();
+        });
+    }
+
+    // Import Memory Button
+    if (DOM.importMemoryBtn && DOM.importMemoryFile) {
+        DOM.importMemoryBtn.addEventListener('click', () => {
+            DOM.importMemoryFile.click();
+        });
+
+        DOM.importMemoryFile.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                importConversationFromJSON(file);
+                e.target.value = ''; // Reset input
+            }
+        });
+    }
+
+    // Clear Session Button
+    if (DOM.clearSessionBtn) {
+        DOM.clearSessionBtn.addEventListener('click', () => {
+            clearCurrentSession();
+        });
+    }
+
+    // Update stats when settings panel opens
+    if (DOM.settingsBtn) {
+        DOM.settingsBtn.addEventListener('click', () => {
+            updateMemoryStats();
         });
     }
 }
@@ -4672,6 +4962,9 @@ async function init() {
 
     // Initialize Speech Recognition Settings
     initializeSpeechSettings();
+
+    // Start auto-save timer for memory management
+    startAutoSaveTimer();
 
     // Initialize TTS
     await initializeTTS();

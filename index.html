@@ -686,6 +686,99 @@
                 </div>
             </div>
 
+            <!-- Memory Management Section -->
+            <div class="accordion-section">
+                <div class="accordion-header" data-target="memorySettings">
+                    <span>🧠 Memory Management</span>
+                    <span class="accordion-icon">▼</span>
+                </div>
+                <div class="accordion-content" id="memorySettings">
+                    <div class="tts-info">
+                        <p>🧠 Control conversation history and long-term memory</p>
+                    </div>
+
+                    <!-- Memory Stats Display -->
+                    <div class="memory-stats" id="memoryStats" style="background: rgba(99, 102, 241, 0.1); border-left: 3px solid #6366f1; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 1em;">📊 Memory Usage</h4>
+                        <div style="display: grid; gap: 8px; font-size: 0.9em;">
+                            <div style="display: flex; justify-content: space-between;">
+                                <span>Messages in Context:</span>
+                                <span id="messagesInContext" style="color: #6366f1; font-weight: 600;">0 / 50</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span>Total Stored Messages:</span>
+                                <span id="totalStoredMessages" style="color: #10b981; font-weight: 600;">0</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span>Storage Used:</span>
+                                <span id="storageUsed" style="color: #f59e0b; font-weight: 600;">0 MB</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span>Last Save:</span>
+                                <span id="lastSave" style="color: var(--text-secondary);">Never</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Memory Mode -->
+                    <div class="control-group">
+                        <label>Memory Mode</label>
+                        <select id="memoryMode">
+                            <option value="auto-prune">Auto-Prune (Keep last N messages)</option>
+                            <option value="full">Full History (Keep everything)</option>
+                            <option value="auto-summarize" disabled>Auto-Summarize (Coming Soon)</option>
+                        </select>
+                        <div class="range-hint">How to manage conversation history when limits are reached</div>
+                    </div>
+
+                    <!-- Max Conversation History -->
+                    <div class="control-group">
+                        <label>Max Context Messages: <span class="range-value" id="maxConversationHistoryValue">50</span></label>
+                        <input type="range" id="maxConversationHistory" min="10" max="100" step="5" value="50">
+                        <div class="range-hint">Maximum messages kept in active context (affects LLM input)</div>
+                    </div>
+
+                    <!-- Long-term Memory -->
+                    <div class="control-group">
+                        <label>
+                            <input type="checkbox" id="enableLongTermMemory" checked>
+                            Enable Long-term Memory (IndexedDB)
+                        </label>
+                        <div class="range-hint">Store conversations in browser database for persistence</div>
+                    </div>
+
+                    <!-- Auto-save Interval -->
+                    <div class="control-group">
+                        <label>Auto-save Interval</label>
+                        <select id="autoSaveInterval">
+                            <option value="0">Off (Manual only)</option>
+                            <option value="300000">Every 5 minutes</option>
+                            <option value="900000">Every 15 minutes</option>
+                            <option value="1800000">Every 30 minutes</option>
+                            <option value="3600000">Every hour</option>
+                        </select>
+                        <div class="range-hint">Automatically save conversations to IndexedDB</div>
+                    </div>
+
+                    <!-- Memory Action Buttons -->
+                    <div class="background-controls" style="display: grid; gap: 10px; margin-top: 20px;">
+                        <button class="upload-btn" id="saveMemoryBtn" style="background: linear-gradient(135deg, #10b981, #059669);">
+                            💾 Save Session Now
+                        </button>
+                        <button class="upload-btn" id="exportMemoryBtn" style="background: linear-gradient(135deg, #3b82f6, #2563eb);">
+                            📤 Export as JSON
+                        </button>
+                        <button class="upload-btn" id="importMemoryBtn" style="background: linear-gradient(135deg, #8b5cf6, #7c3aed);">
+                            📥 Import from JSON
+                        </button>
+                        <input type="file" id="importMemoryFile" accept=".json" style="display: none;">
+                        <button class="control-btn" id="clearSessionBtn">
+                            🗑️ Clear Current Session
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Environment Section (VRM Only) -->
             <div class="accordion-section" id="vrmEnvironmentSection">
                 <div class="accordion-header" data-target="environmentSettings">

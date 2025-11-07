@@ -195,6 +195,12 @@ export class SettingsManager {
             showLiveSubtitles: this.get('showLiveSubtitles', true, 'bool'),
             subtitleDuration: this.get('subtitleDuration', 3, 'float'),
 
+            // Memory Management
+            memoryMode: this.get('memoryMode', 'auto-prune'),
+            maxConversationHistory: this.get('maxConversationHistory', 50, 'int'),
+            enableLongTermMemory: this.get('enableLongTermMemory', true, 'bool'),
+            autoSaveInterval: this.get('autoSaveInterval', 0, 'int'), // 0 = off
+
             // Eye Tracking
             enableEyeTracking: this.get('enableEyeTracking', true, 'bool')
         };

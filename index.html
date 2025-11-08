@@ -405,12 +405,6 @@
                     </div>
 
                     <div class="control-group">
-                        <label>System Prompt (General Instructions)</label>
-                        <textarea id="systemPrompt" rows="6" placeholder="General instructions like: No emojis, no action words like *blushes*, keep responses concise, etc.">You are responding as the character defined in Character Personality. Keep responses natural and conversational. Do not use emojis under any circumstances. Do not use action words or roleplay actions in asterisks like *blushes*, *smiles*, *hugs*, *laughs*, etc. Do not use parentheses for actions or thoughts. Speak only through dialogue. Stay in character at all times. Keep responses concise and engaging.</textarea>
-                        <div class="range-hint">Technical instructions for how the AI should behave (combined with character personality)</div>
-                    </div>
-
-                    <div class="control-group">
                         <button class="upload-btn" id="initMemoryBtn" style="width: 100%;">
                             🧠 Initialize Memory System (Load Models)
                         </button>
@@ -437,6 +431,17 @@
                     <span class="accordion-icon">▼</span>
                 </div>
                 <div class="accordion-content" id="characterSettings">
+                    <div class="tts-info">
+                        <p>🎭 These settings define your AI's personality and behavior</p>
+                        <p>✨ Works with ALL LLM providers (Gemini, OpenAI, OpenRouter, Ollama)</p>
+                    </div>
+
+                    <div class="control-group">
+                        <label>System Prompt (General Instructions)</label>
+                        <textarea id="systemPrompt" rows="6" placeholder="General instructions like: No emojis, no action words like *blushes*, keep responses concise, etc.">You are responding as the character defined in Character Personality. Keep responses natural and conversational. Do not use emojis under any circumstances. Do not use action words or roleplay actions in asterisks like *blushes*, *smiles*, *hugs*, *laughs*, etc. Do not use parentheses for actions or thoughts. Speak only through dialogue. Stay in character at all times. Keep responses concise and engaging.</textarea>
+                        <div class="range-hint">Technical instructions for how the AI should behave (combined with character personality)</div>
+                    </div>
+
                     <div class="control-group">
                         <label>Character Name</label>
                         <input type="text" id="characterName" placeholder="e.g., Neuro-sama">

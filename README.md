@@ -56,7 +56,35 @@ git clone https://github.com/xsploit/WEBWAIFUV2.git
 cd WEBWAIFUV2
 ```
 
-Open `index.html` in your browser. **That's it.**
+**⚠️ IMPORTANT: Use a local server, not `file://` protocol**
+
+While you can open `index.html` directly in your browser, **it's recommended to use a local server** for better compatibility:
+
+**Option 1: VSCode Live Server (Recommended)**
+1. Install [Live Server extension](https://marketplace.visualstudio.com/items?itemName=ritwickdey.LiveServer) in VSCode
+2. Right-click `index.html` → **"Open with Live Server"**
+3. Opens at `http://localhost:5500` (or similar)
+
+**Option 2: Python HTTP Server**
+```bash
+# Python 3
+python -m http.server 8000
+
+# Python 2
+python -m SimpleHTTPServer 8000
+```
+Then open `http://localhost:8000`
+
+**Option 3: Node.js HTTP Server**
+```bash
+npx http-server -p 8000
+```
+Then open `http://localhost:8000`
+
+**Why use a server?**
+- ES6 modules work better with HTTP protocol
+- Avoid CORS issues when loading local files
+- Some browser features require `http://` or `https://` (not `file://`)
 
 ### Netlify Deployment
 

@@ -3768,7 +3768,14 @@ function updateLLMModelOptions() {
     provider.models.forEach(model => {
         const option = document.createElement('option');
         option.value = model;
-        option.textContent = model;
+
+        // Highlight free models with ✅ prefix
+        if (model.includes(':free')) {
+            option.textContent = `✅ ${model}`;
+        } else {
+            option.textContent = model;
+        }
+
         if (model === APP_STATE.settings.llmModel || (!APP_STATE.settings.llmModel && provider.models[0] === model)) {
             option.selected = true;
         }
@@ -3806,7 +3813,14 @@ function updateSummarizationModelOptions() {
     provider.models.forEach(model => {
         const option = document.createElement('option');
         option.value = model;
-        option.textContent = model;
+
+        // Highlight free models with ✅ prefix
+        if (model.includes(':free')) {
+            option.textContent = `✅ ${model}`;
+        } else {
+            option.textContent = model;
+        }
+
         if (model === APP_STATE.settings.summarizationLlmModel || (!APP_STATE.settings.summarizationLlmModel && provider.models[0] === model)) {
             option.selected = true;
         }

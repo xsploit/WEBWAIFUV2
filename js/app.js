@@ -3684,14 +3684,20 @@ function initializeUI() {
     if (llmProvider) {
         llmProvider.addEventListener('change', async (e) => {
             saveSetting('llmProvider', e.target.value);
-            
+
             // *** FIX: Load correct API key for the selected provider ***
             const apiKey = SettingsManager.getProviderApiKey(e.target.value);
 
             // Update APP_STATE with the correct API key
             APP_STATE.settings.llmApiKey = apiKey;
             console.log(`🔑 Loaded API key for ${e.target.value}:`, apiKey ? '✅ Found' : '❌ Missing');
-            
+
+            // *** FIX: Clear model selection when switching providers ***
+            // This prevents using an Ollama model name with OpenRouter, etc.
+            APP_STATE.settings.llmModel = '';
+            saveSetting('llmModel', '');
+            console.log('🔄 Cleared model selection for new provider');
+
             // Fetch models dynamically from provider APIs
             if (e.target.value === 'ollama') {
                 console.log('🔄 Fetching Ollama models from /api/tags...');
@@ -4461,6 +4467,12 @@ function setupSummarizationLLMControls() {
         DOM.summarizationLlmProvider.addEventListener('change', async (e) => {
             saveSetting('summarizationLlmProvider', e.target.value);
             console.log(`🤖 Summarization provider set to ${e.target.value}`);
+
+            // *** FIX: Clear model selection when switching providers ***
+            // This prevents using an Ollama model name with OpenRouter, etc.
+            APP_STATE.settings.summarizationLlmModel = '';
+            saveSetting('summarizationLlmModel', '');
+            console.log('🔄 Cleared summarization model selection for new provider');
 
             // Fetch models from API (reuse existing fetch functions)
             const apiKey = SettingsManager.getProviderApiKey(e.target.value);

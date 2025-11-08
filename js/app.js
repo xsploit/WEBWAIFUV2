@@ -2218,9 +2218,12 @@ async function speakText(text) {
         previousOu = 0;
         previousMouthAmount = 0;
 
-        // DON'T play talking animation - it interferes with lip-sync!
-        // The real-time lip-sync looks better than baked animation
-        // playAnimation('talking'); // DISABLED - use idle + lip-sync instead
+        // Play talking animation for VRM (body movement)
+        // Skip for Live2D as it interferes with Live2D lip-sync
+        if (APP_STATE.settings.avatarType === 'vrm' && APP_STATE.talkingAnimation) {
+            playAnimation('talking');
+            console.log('▶️ Playing VRM talking animation');
+        }
 
         // Ensure mouth is closed initially
         if (APP_STATE.vrm?.expressionManager) {

@@ -5548,20 +5548,32 @@ async function fetchOpenRouterModels(apiKey) {
 
 async function fetchGeminiModels(apiKey) {
     try {
-        // Gemini doesn't have a public models list API, so we'll use known models
-        // You can update this if Gemini releases a models endpoint
+        // Gemini now supports OpenAI-compatible /models endpoint
+        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/models', {
+            headers: { 'Authorization': `Bearer ${apiKey}` }
+        });
+        const data = await response.json();
+
+        if (data.data && Array.isArray(data.data)) {
+            const models = data.data.map(m => m.id);
+            console.log('🤖 Gemini models loaded:', models);
+            LLM_PROVIDERS.gemini.models = models;
+            updateLLMModelOptions();
+            return models;
+        }
+    } catch (error) {
+        console.error('❌ Failed to fetch Gemini models:', error);
+        // Fallback to known models
         const geminiModels = [
             'gemini-2.0-flash-exp',
             'gemini-1.5-pro',
             'gemini-1.5-flash',
             'gemini-1.5-flash-8b'
         ];
-        console.log('🤖 Gemini models (known):', geminiModels);
+        console.log('⚠️ Using fallback Gemini models:', geminiModels);
         LLM_PROVIDERS.gemini.models = geminiModels;
         updateLLMModelOptions();
         return geminiModels;
-    } catch (error) {
-        console.error('❌ Failed to set Gemini models:', error);
     }
     return [];
 }

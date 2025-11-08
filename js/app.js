@@ -678,7 +678,7 @@ function pruneConversationHistory() {
     }
 }
 
-// Auto-summarize old messages when context is full
+// Auto-summarize old messages when context is full (sliding window approach)
 async function summarizeOldMessages() {
     if (APP_STATE.settings.memoryMode !== 'auto-summarize') {
         return; // Only summarize in auto-summarize mode
@@ -686,13 +686,14 @@ async function summarizeOldMessages() {
 
     const maxMessages = APP_STATE.settings.maxConversationHistory;
     const currentCount = APP_STATE.conversationHistory.length;
+    const keepRawCount = 30; // Keep last 30 messages raw (sliding window)
 
     // Only summarize if we're over the limit
     if (currentCount <= maxMessages) {
         return;
     }
 
-    console.log('🤖 Auto-summarize triggered - context full');
+    console.log(`🤖 Auto-summarize triggered - ${currentCount}/${maxMessages} messages`);
 
     // Check if summarization LLM is configured
     if (!APP_STATE.settings.summarizationLlmModel) {
@@ -702,9 +703,32 @@ async function summarizeOldMessages() {
     }
 
     try {
-        // Take oldest 10 messages to summarize
-        const chunkSize = 10;
+        // Sliding window: Keep last 30 raw, summarize older messages
+        // If we have 55 messages, we want to keep last 30 raw
+        // So summarize from index 0 up to (currentCount - keepRawCount)
+        const oldMessagesCount = currentCount - keepRawCount;
+
+        if (oldMessagesCount <= 0) {
+            console.log('⚠️ Not enough old messages to summarize, using auto-prune');
+            pruneConversationHistory();
+            return;
+        }
+
+        // Take oldest 10 messages to summarize (or whatever we have if less)
+        const chunkSize = Math.min(10, oldMessagesCount);
         const chunk = APP_STATE.conversationHistory.slice(0, chunkSize);
+
+        // *** SAVE ORIGINALS TO INDEXEDDB BEFORE DELETING ***
+        if (APP_STATE.settings.enableLongTermMemory && APP_STATE.memoryDB && APP_STATE.modelsLoaded) {
+            console.log(`💾 Saving ${chunkSize} original messages before summarizing...`);
+            for (const msg of chunk) {
+                if (!msg.saved) {
+                    await saveMemory(msg.content, msg.role);
+                    msg.saved = true;
+                }
+            }
+            console.log('✅ Original messages saved to IndexedDB');
+        }
 
         // Format messages for summarization
         const conversationText = chunk
@@ -742,7 +766,7 @@ async function summarizeOldMessages() {
             saved: false
         });
 
-        console.log(`✅ Summarized ${chunkSize} messages into 1 summary`);
+        console.log(`✅ Summarized ${chunkSize} messages → 1 summary (keeping last ${keepRawCount} raw)`);
         console.log(`📝 Summary: ${summary}`);
 
     } catch (error) {

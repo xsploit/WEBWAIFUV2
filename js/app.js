@@ -2598,6 +2598,10 @@ function updateLipSync() {
         return; // Exit early, don't apply smoothing
     }
 
+    // Get phoneme gain (0-200%, default 100% = 1.0)
+    // Used for BOTH phoneme-based (Edge TTS) AND amplitude-based (Fish Audio) lip-sync
+    const phonemeGainMultiplier = (APP_STATE.settings.phonemeGain || 100) / 100;
+
     // ===== PURE AMPLITUDE MODE (when timing is broken or no word match) =====
     if (!hasValidTiming || !currentWordBoundary) {
         // Use PURE audio amplitude for mouth animation
@@ -2606,7 +2610,8 @@ function updateLipSync() {
         const cycle = Math.sin(time) * 0.5 + 0.5; // 0-1 oscillation
 
         // Primary shape based on amplitude (BOOSTED for visibility)
-        targetAa = audioAmplitude * 1.0; // Increased from 0.8 to 1.0 for maximum movement
+        // Apply phoneme gain multiplier to control intensity
+        targetAa = audioAmplitude * 1.0 * phonemeGainMultiplier; // Increased from 0.8 to 1.0 for maximum movement
 
         // Cycle through ALL 5 blend shapes (aa, ih, ou, ee, oh)
         if (cycle < 0.2) {
@@ -2614,25 +2619,25 @@ function updateLipSync() {
             targetAa = Math.min(targetAa * 1.3, 1.0); // Increased from 1.2x to 1.3x
         } else if (cycle < 0.4) {
             // More 'ih' (wide) - boost for visibility
-            targetIh = Math.min(audioAmplitude * 0.75, 1.0);
+            targetIh = Math.min(audioAmplitude * 0.75 * phonemeGainMultiplier, 1.0);
             targetAa *= 0.6; // Reduce 'aa' more to emphasize 'ih'
         } else if (cycle < 0.6) {
             // More 'ou' (round) - boost for visibility
-            targetOu = Math.min(audioAmplitude * 0.75, 1.0);
+            targetOu = Math.min(audioAmplitude * 0.75 * phonemeGainMultiplier, 1.0);
             targetAa *= 0.6; // Reduce 'aa' more to emphasize 'ou'
         } else if (cycle < 0.8) {
             // More 'ee' (smile) - boost for visibility
-            targetEe = Math.min(audioAmplitude * 0.75, 1.0);
+            targetEe = Math.min(audioAmplitude * 0.75 * phonemeGainMultiplier, 1.0);
             targetAa *= 0.6; // Reduce 'aa' more to emphasize 'ee'
         } else {
             // More 'oh' (round open) - boost for visibility
-            targetOh = Math.min(audioAmplitude * 0.75, 1.0);
+            targetOh = Math.min(audioAmplitude * 0.75 * phonemeGainMultiplier, 1.0);
             targetAa *= 0.6; // Reduce 'aa' more to emphasize 'oh'
         }
 
         // Debug logging (throttled)
         if (Math.random() < 0.02) {
-            console.log(`🔊 AMPLITUDE MODE | Amp: ${audioAmplitude.toFixed(2)} | aa=${targetAa.toFixed(2)}, ih=${targetIh.toFixed(2)}, ou=${targetOu.toFixed(2)}, ee=${targetEe.toFixed(2)}, oh=${targetOh.toFixed(2)}`);
+            console.log(`🔊 AMPLITUDE MODE | Amp: ${audioAmplitude.toFixed(2)} | Gain: ${phonemeGainMultiplier.toFixed(2)} | aa=${targetAa.toFixed(2)}, ih=${targetIh.toFixed(2)}, ou=${targetOu.toFixed(2)}, ee=${targetEe.toFixed(2)}, oh=${targetOh.toFixed(2)}`);
         }
     } else {
         // ===== PHONEME MODE (when timing is valid) =====
@@ -2684,9 +2689,6 @@ function updateLipSync() {
             // Map phoneme to blend shapes using PHONEME_TO_BLEND_SHAPE
             const blendMap = PHONEME_TO_BLEND_SHAPE[phonemeKey] || {};
 
-            // Get phoneme gain (0-200%, default 100% = 1.0)
-            const phonemeGainMultiplier = (APP_STATE.settings.phonemeGain || 100) / 100;
-
             // Use phoneme values directly (they're already 0.0-1.0 range) - ALL 5 BLEND SHAPES
             // Apply phoneme gain multiplier to reduce/increase intensity
             targetAa = (blendMap.aa || 0) * phonemeGainMultiplier;
@@ -2732,14 +2734,14 @@ function updateLipSync() {
                 targetEe = phonemeEe;
                 targetOh = phonemeOh;
             } else {
-                // No mapping found - use amplitude-based fallback (don't multiply twice!)
+                // No mapping found - use amplitude-based fallback with phoneme gain
                 const isVowel = /[aeiouæɑɔʊʌɪɛəɜɐ]/i.test(phonemeKey); // Added ɜ and ɐ
                 if (isVowel) {
                     // Vowel with no mapping - open mouth proportional to amplitude
-                    targetAa = Math.max(audioAmplitude * 1.0, 0.3); // Increased from 0.8 to 1.0, minimum 0.3
+                    targetAa = Math.max(audioAmplitude * 1.0 * phonemeGainMultiplier, 0.3); // Increased from 0.8 to 1.0, minimum 0.3
                 } else {
                     // Consonant with no mapping - still show movement
-                    targetAa = Math.max(audioAmplitude * 0.6, 0.2);  // Increased from 0.4 to 0.6, minimum 0.2
+                    targetAa = Math.max(audioAmplitude * 0.6 * phonemeGainMultiplier, 0.2);  // Increased from 0.4 to 0.6, minimum 0.2
                 }
             }
 
@@ -2748,8 +2750,8 @@ function updateLipSync() {
                 console.log(`🗣️ Word[${wordIndex}]: "${currentWordBoundary.word}" | Phonemes: "${wordPhonemes}" | Current: "${phonemeKey}" | Amp: ${audioAmplitude.toFixed(2)} | aa=${targetAa.toFixed(2)}, ih=${targetIh.toFixed(2)}, ou=${targetOu.toFixed(2)}, ee=${targetEe.toFixed(2)}, oh=${targetOh.toFixed(2)}`);
             }
         } else {
-            // No phoneme data, use amplitude alone for basic mouth movement
-            targetAa = audioAmplitude * 0.8; // Default to 'aa' shape
+            // No phoneme data, use amplitude alone for basic mouth movement with phoneme gain
+            targetAa = audioAmplitude * 0.8 * phonemeGainMultiplier; // Default to 'aa' shape
         }
     }
 

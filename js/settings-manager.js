@@ -204,6 +204,10 @@ export class SettingsManager {
             memoryRetentionDays: this.get('memoryRetentionDays', 90, 'int'),
             minMemoryImportance: this.get('minMemoryImportance', 5, 'int'),
 
+            // Summarization LLM (separate from chat LLM)
+            summarizationLlmProvider: this.get('summarizationLlmProvider', 'ollama'),
+            summarizationLlmModel: this.get('summarizationLlmModel', ''),
+
             // Eye Tracking
             enableEyeTracking: this.get('enableEyeTracking', true, 'bool')
         };

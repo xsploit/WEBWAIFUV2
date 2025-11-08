@@ -308,6 +308,8 @@ function initDOMCache() {
     DOM.storageUsed = document.getElementById('storageUsed');
     DOM.browserQuota = document.getElementById('browserQuota');
     DOM.lastSave = document.getElementById('lastSave');
+    DOM.summarizationLlmProvider = document.getElementById('summarizationLlmProvider');
+    DOM.summarizationLlmModel = document.getElementById('summarizationLlmModel');
 
     // Memory System
     DOM.initMemoryBtn = document.getElementById('initMemoryBtn');
@@ -323,7 +325,7 @@ function initDOMCache() {
     DOM.resetTTSBtn = document.getElementById('resetTTSBtn');
     DOM.resetAllBtn = document.getElementById('resetAllBtn');
 
-    console.log('✅ DOM Cache initialized - 115 elements cached');
+    console.log('✅ DOM Cache initialized - 117 elements cached');
 }
 
 // Save setting helper - uses SettingsManager utility
@@ -673,6 +675,80 @@ function pruneConversationHistory() {
         const toRemove = currentCount - maxMessages;
         APP_STATE.conversationHistory.splice(0, toRemove);
         console.log(`🧹 Pruned ${toRemove} old messages from context (keeping last ${maxMessages})`);
+    }
+}
+
+// Auto-summarize old messages when context is full
+async function summarizeOldMessages() {
+    if (APP_STATE.settings.memoryMode !== 'auto-summarize') {
+        return; // Only summarize in auto-summarize mode
+    }
+
+    const maxMessages = APP_STATE.settings.maxConversationHistory;
+    const currentCount = APP_STATE.conversationHistory.length;
+
+    // Only summarize if we're over the limit
+    if (currentCount <= maxMessages) {
+        return;
+    }
+
+    console.log('🤖 Auto-summarize triggered - context full');
+
+    // Check if summarization LLM is configured
+    if (!APP_STATE.settings.summarizationLlmModel) {
+        console.warn('⚠️ No summarization model configured - falling back to auto-prune');
+        pruneConversationHistory();
+        return;
+    }
+
+    try {
+        // Take oldest 10 messages to summarize
+        const chunkSize = 10;
+        const chunk = APP_STATE.conversationHistory.slice(0, chunkSize);
+
+        // Format messages for summarization
+        const conversationText = chunk
+            .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+            .join('\n');
+
+        // Build custom messages for summarization (no character personality)
+        const customMessages = [
+            {
+                role: 'system',
+                content: 'You are a conversation summarizer. Create concise, factual summaries that preserve key information and context. Keep it under 100 words.'
+            },
+            {
+                role: 'user',
+                content: `Summarize this conversation in memory language (concise, factual, preserving key context):\n\n${conversationText}`
+            }
+        ];
+
+        // Use callLLM with summarization provider/model overrides
+        const summary = await callLLM(
+            '', // message (not used when customMessages provided)
+            false, // no streaming
+            null, // no onChunk callback
+            '', // no memory context
+            APP_STATE.settings.summarizationLlmProvider, // override provider
+            APP_STATE.settings.summarizationLlmModel, // override model
+            customMessages // custom messages array
+        );
+
+        // Replace chunk with summary
+        APP_STATE.conversationHistory.splice(0, chunkSize, {
+            role: 'system',
+            content: `[Summary of previous ${chunkSize} messages]: ${summary}`,
+            type: 'summary',
+            saved: false
+        });
+
+        console.log(`✅ Summarized ${chunkSize} messages into 1 summary`);
+        console.log(`📝 Summary: ${summary}`);
+
+    } catch (error) {
+        console.error('❌ Summarization failed:', error);
+        console.log('⚠️ Falling back to auto-prune');
+        pruneConversationHistory();
     }
 }
 
@@ -2651,50 +2727,61 @@ function updateLipSync() {
 // =============================================
 // Unified LLM Function
 // =============================================
-async function callLLM(message, streaming = false, onChunk = null, memoryContext = '') {
-    const provider = LLM_PROVIDERS[APP_STATE.settings.llmProvider];
+async function callLLM(message, streaming = false, onChunk = null, memoryContext = '', overrideProvider = null, overrideModel = null, customMessages = null) {
+    // Use override provider/model if provided (for summarization), otherwise use chat settings
+    const providerName = overrideProvider || APP_STATE.settings.llmProvider;
+    const modelName = overrideModel || APP_STATE.settings.llmModel;
+
+    const provider = LLM_PROVIDERS[providerName];
 
     if (!provider) {
-        throw new Error(`Unknown provider: ${APP_STATE.settings.llmProvider}`);
+        throw new Error(`Unknown provider: ${providerName}`);
     }
 
-    if (!APP_STATE.settings.llmModel) {
+    if (!modelName) {
         throw new Error(`No model selected for ${provider.name}`);
     }
 
-    // Build messages array with memory context
-    // Combine system prompt (general instructions) + character personality
-    let systemMessage = APP_STATE.settings.systemPrompt;
+    // If customMessages provided, use them directly (for summarization)
+    // Otherwise build messages with character personality (for chat)
+    let messages;
+    if (customMessages) {
+        messages = customMessages;
+    } else {
+        // Build messages array with memory context
+        // Combine system prompt (general instructions) + character personality
+        let systemMessage = APP_STATE.settings.systemPrompt;
 
-    // Add character personality
-    if (APP_STATE.settings.characterPersonality) {
-        systemMessage += `\n\n${APP_STATE.settings.characterPersonality}`;
+        // Add character personality
+        if (APP_STATE.settings.characterPersonality) {
+            systemMessage += `\n\n${APP_STATE.settings.characterPersonality}`;
+        }
+
+        // Inject character name if available
+        if (APP_STATE.settings.characterName) {
+            systemMessage += `\n\n[Your character name is: ${APP_STATE.settings.characterName}]`;
+        }
+
+        // Inject user name if available
+        if (APP_STATE.settings.userName) {
+            systemMessage += `\n\n[The user's name is ${APP_STATE.settings.userName}]`;
+        }
+
+        // Append memory context
+        if (memoryContext) {
+            systemMessage += memoryContext;
+        }
+
+        messages = [
+            { role: 'system', content: systemMessage },
+            ...APP_STATE.conversationHistory,
+            { role: 'user', content: message }
+        ];
     }
 
-    // Inject character name if available
-    if (APP_STATE.settings.characterName) {
-        systemMessage += `\n\n[Your character name is: ${APP_STATE.settings.characterName}]`;
-    }
-
-    // Inject user name if available
-    if (APP_STATE.settings.userName) {
-        systemMessage += `\n\n[The user's name is ${APP_STATE.settings.userName}]`;
-    }
-
-    // Append memory context
-    if (memoryContext) {
-        systemMessage += memoryContext;
-    }
-
-    const messages = [
-        { role: 'system', content: systemMessage },
-        ...APP_STATE.conversationHistory,
-        { role: 'user', content: message }
-    ];
-    
     // Build request body (OpenAI-compatible format)
     const requestBody = {
-        model: APP_STATE.settings.llmModel,
+        model: modelName,
         messages: messages,
         temperature: APP_STATE.settings.llmTemperature,
         max_tokens: APP_STATE.settings.llmMaxTokens,
@@ -2703,7 +2790,7 @@ async function callLLM(message, streaming = false, onChunk = null, memoryContext
     
     // *** OLLAMA PERFORMANCE OPTIMIZATION ***
     // Add Ollama-specific parameters for faster inference
-    if (APP_STATE.settings.llmProvider === 'ollama') {
+    if (providerName === 'ollama') {
         requestBody.options = {
             // KV Cache - keeps context in memory for faster subsequent requests
             num_keep: -1,  // Keep all context in cache (-1 = keep everything)
@@ -2755,18 +2842,19 @@ async function callLLM(message, streaming = false, onChunk = null, memoryContext
     const headers = {
         'Content-Type': 'application/json'
     };
-    
+
     // Add API key if required
-    if (provider.apiKeyRequired && APP_STATE.settings.llmApiKey) {
-        if (APP_STATE.settings.llmProvider === 'gemini') {
-            headers['x-goog-api-key'] = APP_STATE.settings.llmApiKey;
+    const apiKey = SettingsManager.getProviderApiKey(providerName);
+    if (provider.apiKeyRequired && apiKey) {
+        if (providerName === 'gemini') {
+            headers['x-goog-api-key'] = apiKey;
         } else {
-            headers['Authorization'] = `Bearer ${APP_STATE.settings.llmApiKey}`;
+            headers['Authorization'] = `Bearer ${apiKey}`;
         }
     }
-    
+
     // OpenRouter specific headers
-    if (APP_STATE.settings.llmProvider === 'openrouter') {
+    if (providerName === 'openrouter') {
         headers['HTTP-Referer'] = window.location.href;
         headers['X-Title'] = 'WEBWAIFU';
     }
@@ -2923,8 +3011,12 @@ async function sendToAI(message) {
             { role: 'assistant', content: response, saved: false }
         );
 
-        // Prune conversation history based on memory settings
-        pruneConversationHistory();
+        // Handle conversation history based on memory mode (prune or summarize)
+        if (APP_STATE.settings.memoryMode === 'auto-summarize') {
+            await summarizeOldMessages();
+        } else {
+            pruneConversationHistory();
+        }
 
         // Display response
         displayAIResponse(response);
@@ -3509,6 +3601,7 @@ function initializeUI() {
     setupAnimationControls();
     setupDisplayControls();
     setupMemoryControls();
+    setupSummarizationLLMControls();
     setupPasswordToggles();
 
     // Setup keyboard controls last
@@ -3619,6 +3712,44 @@ function updateLLMModelOptions() {
     if (!APP_STATE.settings.llmModel && provider.models.length > 0) {
         APP_STATE.settings.llmModel = provider.models[0];
         saveSetting('llmModel', provider.models[0]);
+        modelSelect.value = provider.models[0];
+    }
+}
+
+function updateSummarizationModelOptions() {
+    const provider = LLM_PROVIDERS[APP_STATE.settings.summarizationLlmProvider];
+    const modelSelect = DOM.summarizationLlmModel;
+
+    if (!provider || !modelSelect) {
+        console.warn('Summarization provider or model select not available yet');
+        return;
+    }
+
+    modelSelect.innerHTML = '';
+
+    if (provider.models.length === 0) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = '⏳ Loading models...';
+        option.disabled = true;
+        modelSelect.appendChild(option);
+        return;
+    }
+
+    provider.models.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model;
+        option.textContent = model;
+        if (model === APP_STATE.settings.summarizationLlmModel || (!APP_STATE.settings.summarizationLlmModel && provider.models[0] === model)) {
+            option.selected = true;
+        }
+        modelSelect.appendChild(option);
+    });
+
+    // Auto-select first model if none selected
+    if (!APP_STATE.settings.summarizationLlmModel && provider.models.length > 0) {
+        APP_STATE.settings.summarizationLlmModel = provider.models[0];
+        saveSetting('summarizationLlmModel', provider.models[0]);
         modelSelect.value = provider.models[0];
     }
 }
@@ -4232,6 +4363,71 @@ function setupMemoryControls() {
     if (DOM.settingsBtn) {
         DOM.settingsBtn.addEventListener('click', () => {
             updateMemoryStats();
+        });
+    }
+}
+
+function setupSummarizationLLMControls() {
+    // Summarization LLM Provider
+    if (DOM.summarizationLlmProvider) {
+        DOM.summarizationLlmProvider.value = APP_STATE.settings.summarizationLlmProvider;
+
+        DOM.summarizationLlmProvider.addEventListener('change', async (e) => {
+            saveSetting('summarizationLlmProvider', e.target.value);
+            console.log(`🤖 Summarization provider set to ${e.target.value}`);
+
+            // Fetch models from API (reuse existing fetch functions)
+            const apiKey = SettingsManager.getProviderApiKey(e.target.value);
+
+            if (e.target.value === 'ollama') {
+                console.log('🔄 Fetching Ollama models for summarization...');
+                await fetchOllamaModels();
+                updateSummarizationModelOptions();
+            } else if (e.target.value === 'openai') {
+                if (apiKey) {
+                    console.log('🔄 Fetching OpenAI models for summarization...');
+                    await fetchOpenAIModels(apiKey);
+                    updateSummarizationModelOptions();
+                } else {
+                    console.warn('⚠️ OpenAI API key required');
+                    updateSummarizationModelOptions();
+                }
+            } else if (e.target.value === 'openrouter') {
+                if (apiKey) {
+                    console.log('🔄 Fetching OpenRouter models for summarization...');
+                    await fetchOpenRouterModels(apiKey);
+                    updateSummarizationModelOptions();
+                } else {
+                    console.warn('⚠️ OpenRouter API key required');
+                    updateSummarizationModelOptions();
+                }
+            } else if (e.target.value === 'gemini') {
+                console.log('📝 Using Gemini static models for summarization');
+                updateSummarizationModelOptions();
+            }
+        });
+
+        // Load initial models for default provider
+        (async () => {
+            const provider = APP_STATE.settings.summarizationLlmProvider;
+            const apiKey = SettingsManager.getProviderApiKey(provider);
+
+            if (provider === 'ollama') {
+                await fetchOllamaModels();
+            } else if (provider === 'openai' && apiKey) {
+                await fetchOpenAIModels(apiKey);
+            } else if (provider === 'openrouter' && apiKey) {
+                await fetchOpenRouterModels(apiKey);
+            }
+            updateSummarizationModelOptions();
+        })();
+    }
+
+    // Summarization LLM Model
+    if (DOM.summarizationLlmModel) {
+        DOM.summarizationLlmModel.addEventListener('change', (e) => {
+            saveSetting('summarizationLlmModel', e.target.value);
+            console.log(`🤖 Summarization model set to ${e.target.value}`);
         });
     }
 }

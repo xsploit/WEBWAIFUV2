@@ -730,7 +730,7 @@
                         <select id="memoryMode">
                             <option value="auto-prune">Auto-Prune (Keep last N messages)</option>
                             <option value="full">Full History (Keep everything)</option>
-                            <option value="auto-summarize" disabled>Auto-Summarize (Coming Soon)</option>
+                            <option value="auto-summarize">Auto-Summarize (Use separate LLM)</option>
                         </select>
                         <div class="range-hint">How to manage conversation history when limits are reached</div>
                     </div>
@@ -740,6 +740,31 @@
                         <label>Max Context Messages: <span class="range-value" id="maxConversationHistoryValue">50</span></label>
                         <input type="range" id="maxConversationHistory" min="10" max="100" step="5" value="50">
                         <div class="range-hint">Maximum messages kept in active context (affects LLM input)</div>
+                    </div>
+
+                    <!-- Summarization LLM Settings -->
+                    <div class="tts-info" style="margin-top: 20px; background: rgba(139, 92, 246, 0.1); border-left: 3px solid #8b5cf6;">
+                        <p>🤖 <strong>Summarization LLM</strong> - Separate model for auto-summarize</p>
+                        <p>Use cheap/local models for summaries, keep expensive ones for chat</p>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Summarization Provider</label>
+                        <select id="summarizationLlmProvider">
+                            <option value="ollama">Ollama (Local/Free)</option>
+                            <option value="openrouter">OpenRouter</option>
+                            <option value="gemini">Gemini</option>
+                            <option value="openai">OpenAI</option>
+                        </select>
+                        <div class="range-hint">Which LLM provider to use for auto-summarization</div>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Summarization Model</label>
+                        <select id="summarizationLlmModel">
+                            <option value="">Select provider first...</option>
+                        </select>
+                        <div class="range-hint">Model for summarization (auto-loaded from API)</div>
                     </div>
 
                     <!-- Long-term Memory -->

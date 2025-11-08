@@ -2915,14 +2915,10 @@ async function callLLM(message, streaming = false, onChunk = null, memoryContext
         'Content-Type': 'application/json'
     };
 
-    // Add API key if required
+    // Add API key if required (all providers use OpenAI-compatible format)
     const apiKey = SettingsManager.getProviderApiKey(providerName);
     if (provider.apiKeyRequired && apiKey) {
-        if (providerName === 'gemini') {
-            headers['x-goog-api-key'] = apiKey;
-        } else {
-            headers['Authorization'] = `Bearer ${apiKey}`;
-        }
+        headers['Authorization'] = `Bearer ${apiKey}`;
     }
 
     // OpenRouter specific headers

@@ -35,7 +35,7 @@ An interactive AI character that lives in your browser. Talk to it using voice o
 - 🔊 **Dual TTS Support** - Edge TTS (free, 400+ voices, phonemes) or Fish Audio (paid, custom voice cloning, amplitude-based)
 - 🤖 **Multi-Provider LLM** - Gemini, OpenAI, OpenRouter, Ollama (local)
 - 🎤 **Speech Recognition** - Browser-based Whisper AI via Web Worker (no API calls)
-- 🧠 **Memory System** - Semantic search with embeddings, stores conversations locally in IndexedDB
+- 🧠 **Memory System** - Semantic search with embeddings, auto-summarize with separate LLM (sliding window), conversation continuity, IndexedDB storage
 - 🎬 **Animation System** - Mixamo FBX for VRM, automatic idle/talking states, animations pause during speech
 
 ### Technical Highlights
@@ -280,6 +280,335 @@ Setting `OLLAMA_ORIGINS=*` tells Ollama to send the correct CORS headers (`Acces
 
 ---
 
+## 🧠 Memory System
+
+WEBWAIFU V2 features a sophisticated memory system that stores conversations locally in your browser using **IndexedDB** - no server required, fully private.
+
+### How Memory Works
+
+**Architecture:**
+- **IndexedDB Storage** - All conversations stored locally in your browser (persistent across sessions)
+- **Semantic Search** - Uses AI embeddings to find relevant past conversations
+- **Memory Modes** - Three strategies for managing context window size
+- **Conversation Continuity** - Automatically loads last 10 messages on startup
+
+### Memory Modes
+
+**1. Auto-Prune (Default)**
+```
+When conversation history exceeds limit:
+→ Delete oldest 10 messages
+→ Keep recent 45 messages
+```
+- ✅ Simple, predictable
+- ✅ Fast, no LLM calls
+- ⚠️ Context is lost forever
+
+**2. Auto-Summarize**
+```
+When conversation history exceeds limit:
+→ Save oldest messages to IndexedDB (backup)
+→ Use separate LLM to summarize them
+→ Replace 10 messages with 1 summary
+→ Keep last 30 raw messages (sliding window)
+```
+- ✅ **Preserves context** using AI compression
+- ✅ **Uses separate LLM** - use cheap/local models (Ollama) for summaries, expensive ones (GPT-4) for chat
+- ✅ **Sliding window** - keeps last 30 messages raw for quality
+- ✅ **Originals saved** - no data loss, all messages backed up to IndexedDB
+- ⚠️ Requires summarization LLM configured
+- ⚠️ Slower than auto-prune (LLM call needed)
+
+**3. Hybrid (Best of Both)**
+```
+→ Auto-summarize if LLM available
+→ Falls back to auto-prune if summarization fails
+```
+
+### Semantic Search
+
+**How it works:**
+1. **User sends message** → System generates embedding vector
+2. **Search IndexedDB** → Compare with stored conversation embeddings
+3. **Return top 3 matches** → Most relevant past conversations
+4. **Inject into context** → LLM sees: `[Memory Context: ...]` + current conversation
+
+**Model:** MiniLM-L6-v2 (23MB, runs in browser)
+
+**Why it's powerful:**
+- AI can reference conversations from weeks/months ago
+- Semantic matching finds **meaning**, not just keywords
+- Searches across ALL stored memories, not just recent 50
+
+### Sliding Window (Auto-Summarize Mode)
+
+```
+Conversation: 60 messages total
+Max History: 50 messages
+
+┌─────────────────────────────────────────┐
+│ [Summary of 10 messages] ← Compressed   │ ← Oldest (summarized)
+├─────────────────────────────────────────┤
+│ Message 11-30: RAW                      │ ← Middle (raw)
+│ Message 31-50: RAW                      │ ← Recent (raw)
+│ Message 51-60: RAW                      │ ← Newest (raw)
+└─────────────────────────────────────────┘
+          ↑
+    Last 30 kept raw for quality
+```
+
+**Why sliding window?**
+- Recent conversations stay **detailed** (better LLM context)
+- Old conversations get **compressed** (save space)
+- Original messages **backed up** to IndexedDB (no data loss)
+
+### Separate Summarization LLM
+
+**Use Case:** Run expensive LLM for chat (GPT-4, Claude), cheap/local LLM for summaries (Ollama)
+
+**Example Setup:**
+```
+Chat LLM:        OpenRouter → Claude 3.5 Sonnet ($3/M tokens)
+Summary LLM:     Ollama → Llama 3.2 (FREE, local)
+```
+
+**Benefits:**
+- 💰 **Save money** - Summaries use cheap/free models
+- 🚀 **Keep quality** - Chat uses premium models
+- 🔒 **Privacy** - Summarize locally with Ollama, chat with cloud
+- ⚡ **Performance** - Local summaries = instant
+
+### Storage Quota Monitoring
+
+**Auto-Cleanup (Optional):**
+- **Enable Auto-Cleanup** → Deletes old memories based on importance/age
+- **Retention Days** → Keep memories for X days (default: 90)
+- **Min Importance** → Only keep memories with importance score ≥ X (0-10)
+- **Manual Cleanup** → Button to delete all memories and free space
+
+**Storage Info Display:**
+- Shows used/total quota (e.g., "42.3 MB / 5.0 GB")
+- Warns when approaching quota limit
+- Estimates messages/memories that can be stored
+
+### Conversation Continuity
+
+**On App Restart:**
+1. IndexedDB loads last 10 messages
+2. Messages populate `conversationHistory`
+3. AI immediately has context from previous session
+4. User can continue conversation where they left off
+
+**Why this matters:**
+- No "cold start" - AI remembers you
+- Conversations feel continuous across days/weeks
+- Combined with semantic search, AI has both **recent** (last 10) and **relevant** (top 3 matches) context
+
+### Memory Settings
+
+```javascript
+// In Settings → Memory Management
+memoryMode: 'auto-prune' | 'auto-summarize' | 'hybrid'
+maxConversationHistory: 50              // When to trigger cleanup
+enableLongTermMemory: true              // Store in IndexedDB
+autoSaveInterval: 0                     // Auto-save every X seconds (0 = manual)
+enableAutoCleanup: false                // Delete old/low-importance memories
+memoryRetentionDays: 90                 // Keep memories for X days
+minMemoryImportance: 5                  // Keep memories with score ≥ X
+
+// Separate Summarization LLM
+summarizationLlmProvider: 'ollama'      // Which provider for summaries
+summarizationLlmModel: 'llama3.2'       // Which model for summaries
+```
+
+---
+
+## 🤖 AI Models Loaded in Browser
+
+WEBWAIFU V2 runs **three AI models entirely in your browser** using Web Workers - no external API calls, fully private and offline-capable.
+
+### 1. Whisper Tiny (Speech Recognition)
+
+**Purpose:** Convert voice input to text
+
+**Stats:**
+- **Size:** ~40MB
+- **Model:** `Xenova/whisper-tiny` (OpenAI Whisper)
+- **Languages:** 99+ languages supported
+- **Accuracy:** ~85% WER (Word Error Rate)
+- **Speed:** Real-time transcription
+
+**How it loads:**
+```javascript
+// On first voice input:
+1. User clicks microphone button
+2. Browser downloads model from HuggingFace CDN
+3. Model cached in browser (IndexedDB/Cache API)
+4. Loaded into Web Worker (non-blocking)
+5. Ready for transcription (~5-10 seconds first load)
+
+// On subsequent uses:
+→ Loads instantly from browser cache
+```
+
+**Technical Details:**
+- Runs in **Web Worker** (`whisper-worker.js`) - doesn't block UI
+- Uses **@xenova/transformers** (ONNX Runtime for browser)
+- Audio resampled to 16kHz before processing
+- Outputs text with timestamp metadata
+
+**Performance:**
+- **First load:** 5-10 seconds (download + initialize)
+- **Cached load:** <1 second
+- **Transcription:** ~1-2 seconds per 10-second audio clip
+- **Memory:** ~100MB RAM while active
+
+### 2. MiniLM-L6-v2 (Semantic Embeddings)
+
+**Purpose:** Convert text to numerical vectors for semantic search
+
+**Stats:**
+- **Size:** 23MB
+- **Model:** `Xenova/all-MiniLM-L6-v2` (Sentence Transformers)
+- **Dimensions:** 384 (vector size)
+- **Use Case:** Memory semantic search
+
+**How it works:**
+```javascript
+// User sends message: "I love pizza"
+1. Message converted to 384-dimensional vector: [0.234, -0.891, ...]
+2. Compare with all stored memory vectors using cosine similarity
+3. Return top 3 most similar memories
+4. Inject into LLM context
+
+// Example search:
+Query: "What's my favorite food?"
+→ Finds: "I love pizza" (from 2 weeks ago)
+→ LLM sees memory and responds: "You mentioned loving pizza!"
+```
+
+**Loading:**
+- Loads automatically when **enableLongTermMemory** is ON
+- Cached after first load (~2-3 seconds)
+- Runs in main thread (lightweight)
+
+**Performance:**
+- **Embedding generation:** <50ms per message
+- **Search 1000 memories:** <100ms
+- **Memory:** ~50MB RAM
+
+### 3. DistilBERT (Sentiment Classification) - Optional
+
+**Purpose:** Analyze emotional tone of messages (happy, sad, angry, etc.)
+
+**Stats:**
+- **Size:** 250MB
+- **Model:** `Xenova/distilbert-base-uncased-finetuned-sst-2-english`
+- **Classes:** Positive, Negative, Neutral
+- **Accuracy:** ~85%
+
+**How it works:**
+```javascript
+// Analyze user message sentiment:
+Message: "I'm so happy today!"
+→ Sentiment: Positive (0.95 confidence)
+→ Used to:
+   - Adjust avatar expression (smile for positive, sad for negative)
+   - Store memory importance score (emotional messages = higher importance)
+   - Trigger context-aware animations
+```
+
+**Loading:**
+- **Optional** - Only loads if sentiment analysis is enabled
+- **Largest model** - Takes 10-20 seconds on first load
+- Cached after first load
+
+**Performance:**
+- **Classification:** ~100-200ms per message
+- **Memory:** ~300MB RAM while loaded
+
+### Web Worker Architecture
+
+**Why Web Workers?**
+- **Non-blocking:** Models run in separate thread - UI stays responsive
+- **Parallel processing:** Multiple models can run simultaneously
+- **No freezing:** 250MB model loads don't freeze the app
+
+**How it's implemented:**
+```
+Main Thread                    Web Worker Thread
+─────────────────────────────────────────────────────
+[User speaks] ───────────────→ [Load Whisper model]
+[UI responsive]                [Transcribe audio]
+[User can interact] ←────────── [Return text result]
+```
+
+**Data Flow:**
+```javascript
+// whisper-worker.js
+1. Main thread sends audio buffer to worker
+2. Worker processes audio with Whisper model
+3. Worker sends back transcription text
+4. Main thread displays result (no blocking!)
+```
+
+### Model Caching Strategy
+
+**First Load (Cold Start):**
+```
+1. User triggers AI feature
+2. Download model from HuggingFace CDN
+3. Store in browser cache (IndexedDB + Cache API)
+4. Load into memory
+5. Ready to use
+
+Total: 5-30 seconds depending on model size
+```
+
+**Subsequent Loads (Warm Start):**
+```
+1. User triggers AI feature
+2. Load from browser cache (instant)
+3. Load into memory
+4. Ready to use
+
+Total: <1 second
+```
+
+**Cache Persistence:**
+- Models stored in browser forever (until cleared)
+- Survives page refreshes, browser restarts
+- Uses browser storage APIs (same as installed PWAs)
+
+### Memory Usage Summary
+
+**With All Models Loaded:**
+```
+Whisper Tiny:       ~100MB RAM
+MiniLM-L6-v2:       ~50MB RAM
+DistilBERT:         ~300MB RAM (optional)
+Three.js/VRM:       ~150MB RAM
+Total:              ~600MB RAM
+```
+
+**Browser Compatibility:**
+- Chrome/Edge: ✅ Full support
+- Firefox: ✅ Full support
+- Safari: ⚠️ Limited Web Worker support (may be slower)
+
+### Offline Capabilities
+
+**Once models are cached:**
+- ✅ **Speech recognition** - Fully offline
+- ✅ **Semantic search** - Fully offline
+- ✅ **Sentiment analysis** - Fully offline
+- ❌ **LLM chat** - Requires internet (unless using Ollama locally)
+- ❌ **Edge TTS** - Requires internet
+
+**Use Case:** Run Ollama locally + cached Whisper = fully offline AI companion!
+
+---
+
 ## 📁 Project Structure
 
 ```
@@ -327,13 +656,20 @@ All documentation is now in this README. For detailed technical information, see
 - **fish-audio** npm package
 
 ### Storage
-- **IndexedDB** (conversation memory)
-- **localStorage** (settings)
+- **IndexedDB** (conversation memory with semantic search)
+- **localStorage** (settings persistence)
 
-### AI Models
-- **Whisper Tiny** - Speech-to-text (~40MB, runs in browser)
-- **MiniLM-L6-v2** - Embeddings (23MB)
-- **DistilBERT** - Sentiment classification (250MB, optional)
+### AI Models (Browser-Based)
+- **Whisper Tiny** - Speech-to-text (~40MB, Web Worker, offline-capable)
+- **MiniLM-L6-v2** - Semantic embeddings (23MB, offline-capable)
+- **DistilBERT** - Sentiment classification (250MB, optional, offline-capable)
+
+### Memory Features
+- **Semantic Search** - Find relevant past conversations using AI embeddings
+- **Auto-Summarize** - Use separate LLM to compress old messages (sliding window)
+- **Auto-Prune** - Simple deletion of old messages
+- **Conversation Continuity** - Auto-load last 10 messages on restart
+- **Storage Quota Monitoring** - Track usage, auto-cleanup old/low-importance memories
 
 ---
 

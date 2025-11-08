@@ -591,6 +591,49 @@ async function clearAllMemories() {
     });
 }
 
+// Load recent conversation history from IndexedDB (last 10 messages)
+async function loadRecentConversationHistory() {
+    if (!APP_STATE.memoryDB) {
+        console.log('💬 Memory DB not ready, skipping conversation history load');
+        return;
+    }
+
+    try {
+        const transaction = APP_STATE.memoryDB.transaction([MEMORY_STORE_NAME], 'readonly');
+        const objectStore = transaction.objectStore(MEMORY_STORE_NAME);
+
+        const memories = await new Promise((resolve, reject) => {
+            const request = objectStore.getAll();
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+
+        if (memories.length === 0) {
+            console.log('💬 No previous conversation found');
+            return;
+        }
+
+        // Sort by timestamp (newest first)
+        memories.sort((a, b) => b.timestamp - a.timestamp);
+
+        // Take last 10 messages
+        const recentMessages = memories.slice(0, 10).reverse(); // Reverse to get chronological order
+
+        // Convert to conversationHistory format
+        APP_STATE.conversationHistory = recentMessages.map(mem => ({
+            role: mem.role,
+            content: mem.text,
+            saved: true // Already in IndexedDB
+        }));
+
+        console.log(`💬 Loaded ${APP_STATE.conversationHistory.length} recent messages from IndexedDB`);
+        showStatus(`💬 Restored last ${APP_STATE.conversationHistory.length} messages`, 'success');
+
+    } catch (error) {
+        console.error('Failed to load conversation history:', error);
+    }
+}
+
 // =============================================
 // Memory Management Functions
 // =============================================
@@ -5324,6 +5367,9 @@ async function init() {
     try {
         await initMemoryDB();
         console.log('✅ Memory DB ready');
+
+        // Load last 10 messages from IndexedDB to restore context
+        await loadRecentConversationHistory();
     } catch (error) {
         console.error('⚠️ Memory DB initialization failed:', error);
     }

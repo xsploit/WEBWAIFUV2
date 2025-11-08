@@ -117,6 +117,32 @@ export class SettingsManager {
     }
 
     /**
+     * Get per-provider model selection
+     * @param {string} provider - Provider name ('ollama', 'openrouter', 'gemini', 'openai')
+     * @param {boolean} isSummarization - Whether this is for summarization LLM
+     * @returns {string} - Model name for this provider
+     */
+    static getProviderModel(provider, isSummarization = false) {
+        const prefix = isSummarization ? 'summarization' : '';
+        const capitalize = (str) => str.charAt(0).toUpperCase() + str.slice(1);
+        const key = `${prefix}${capitalize(provider)}Model`;
+        return this.get(key, '');
+    }
+
+    /**
+     * Set per-provider model selection
+     * @param {string} provider - Provider name ('ollama', 'openrouter', 'gemini', 'openai')
+     * @param {string} model - Model name
+     * @param {boolean} isSummarization - Whether this is for summarization LLM
+     */
+    static setProviderModel(provider, model, isSummarization = false) {
+        const prefix = isSummarization ? 'summarization' : '';
+        const capitalize = (str) => str.charAt(0).toUpperCase() + str.slice(1);
+        const key = `${prefix}${capitalize(provider)}Model`;
+        this.set(key, model);
+    }
+
+    /**
      * Load all settings into an object
      * @returns {object} - Settings object
      */
@@ -133,7 +159,14 @@ export class SettingsManager {
         return {
             // LLM Settings
             llmProvider: currentProvider,
-            llmModel: this.get('llmModel', ''),
+            llmModel: this.get('llmModel', ''), // Legacy - deprecated
+
+            // Per-provider model selection (preserves choice when switching)
+            ollamaModel: this.get('ollamaModel', ''),
+            openrouterModel: this.get('openrouterModel', ''),
+            geminiModel: this.get('geminiModel', ''),
+            openaiModel: this.get('openaiModel', ''),
+
             llmApiKey: currentApiKey,
             llmTemperature: this.get('llmTemperature', 0.7, 'float'),
             llmMaxTokens: this.get('llmMaxTokens', 2048, 'int'),
@@ -206,7 +239,13 @@ export class SettingsManager {
 
             // Summarization LLM (separate from chat LLM)
             summarizationLlmProvider: this.get('summarizationLlmProvider', 'ollama'),
-            summarizationLlmModel: this.get('summarizationLlmModel', ''),
+            summarizationLlmModel: this.get('summarizationLlmModel', ''), // Legacy - deprecated
+
+            // Per-provider summarization model selection
+            summarizationOllamaModel: this.get('summarizationOllamaModel', ''),
+            summarizationOpenrouterModel: this.get('summarizationOpenrouterModel', ''),
+            summarizationGeminiModel: this.get('summarizationGeminiModel', ''),
+            summarizationOpenaiModel: this.get('summarizationOpenaiModel', ''),
 
             // Eye Tracking
             enableEyeTracking: this.get('enableEyeTracking', true, 'bool')

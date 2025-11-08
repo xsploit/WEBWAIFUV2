@@ -3688,11 +3688,10 @@ function initializeUI() {
             APP_STATE.settings.llmApiKey = apiKey;
             console.log(`🔑 Loaded API key for ${e.target.value}:`, apiKey ? '✅ Found' : '❌ Missing');
 
-            // *** FIX: Clear model selection when switching providers ***
-            // This prevents using an Ollama model name with OpenRouter, etc.
-            APP_STATE.settings.llmModel = '';
-            saveSetting('llmModel', '');
-            console.log('🔄 Cleared model selection for new provider');
+            // Load per-provider model selection
+            const savedModel = SettingsManager.getProviderModel(e.target.value, false);
+            APP_STATE.settings.llmModel = savedModel;
+            console.log(`🔄 Loaded saved model for ${e.target.value}:`, savedModel || '(none)');
 
             // Fetch models dynamically from provider APIs
             if (e.target.value === 'ollama') {
@@ -3871,7 +3870,14 @@ function setupLLMControls() {
     const llmModel = document.getElementById('llmModel');
     if (llmModel) {
         llmModel.addEventListener('change', (e) => {
-            saveSetting('llmModel', e.target.value);
+            const currentProvider = APP_STATE.settings.llmProvider;
+            const modelValue = e.target.value;
+
+            // Save to both global (legacy) and per-provider storage
+            saveSetting('llmModel', modelValue);
+            SettingsManager.setProviderModel(currentProvider, modelValue, false);
+
+            console.log(`💾 Saved ${currentProvider} model:`, modelValue);
         });
     }
     
@@ -4464,11 +4470,10 @@ function setupSummarizationLLMControls() {
             saveSetting('summarizationLlmProvider', e.target.value);
             console.log(`🤖 Summarization provider set to ${e.target.value}`);
 
-            // *** FIX: Clear model selection when switching providers ***
-            // This prevents using an Ollama model name with OpenRouter, etc.
-            APP_STATE.settings.summarizationLlmModel = '';
-            saveSetting('summarizationLlmModel', '');
-            console.log('🔄 Cleared summarization model selection for new provider');
+            // Load per-provider model selection
+            const savedModel = SettingsManager.getProviderModel(e.target.value, true);
+            APP_STATE.settings.summarizationLlmModel = savedModel;
+            console.log(`🔄 Loaded saved summarization model for ${e.target.value}:`, savedModel || '(none)');
 
             // Fetch models from API (reuse existing fetch functions)
             const apiKey = SettingsManager.getProviderApiKey(e.target.value);
@@ -4520,8 +4525,14 @@ function setupSummarizationLLMControls() {
     // Summarization LLM Model
     if (DOM.summarizationLlmModel) {
         DOM.summarizationLlmModel.addEventListener('change', (e) => {
-            saveSetting('summarizationLlmModel', e.target.value);
-            console.log(`🤖 Summarization model set to ${e.target.value}`);
+            const currentProvider = APP_STATE.settings.summarizationLlmProvider;
+            const modelValue = e.target.value;
+
+            // Save to both global (legacy) and per-provider storage
+            saveSetting('summarizationLlmModel', modelValue);
+            SettingsManager.setProviderModel(currentProvider, modelValue, true);
+
+            console.log(`💾 Saved ${currentProvider} summarization model:`, modelValue);
         });
     }
 }

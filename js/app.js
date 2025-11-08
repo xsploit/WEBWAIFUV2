@@ -3911,7 +3911,11 @@ function setupLLMControls() {
     
     // System prompt (general instructions) - use DOM cache
     if (DOM.systemPrompt) {
-        DOM.systemPrompt.value = APP_STATE.settings.systemPrompt;
+        // Only override HTML default if we have a saved value
+        // This prevents empty localStorage values from clearing the default text
+        if (APP_STATE.settings.systemPrompt && APP_STATE.settings.systemPrompt.trim()) {
+            DOM.systemPrompt.value = APP_STATE.settings.systemPrompt;
+        }
         DOM.systemPrompt.addEventListener('change', (e) => {
             saveSetting('systemPrompt', e.target.value);
         });

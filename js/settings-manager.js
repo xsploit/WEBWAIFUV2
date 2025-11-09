@@ -190,6 +190,7 @@ export class SettingsManager {
             fishApiKey: this.get('fishApiKey', ''),
             fishVoiceId: this.get('fishVoiceId', ''),
             fishCustomModelId: this.get('fishCustomModelId', ''),
+            fishUseWebSocket: this.get('fishUseWebSocket', false, 'bool-inverse'), // Default: false (use Netlify)
 
             // Avatar Settings
             avatarType: this.get('avatarType', 'vrm'),

@@ -145,7 +145,13 @@ const APP_STATE = {
     modelsLoaded: false,
 
     // Settings with localStorage persistence - managed by SettingsManager utility
-    settings: SettingsManager.loadAll()
+    settings: SettingsManager.loadAll(),
+
+    // Fish Audio WebSocket (local development only)
+    fishWebSocket: null,
+    fishWsConnected: false,
+    fishWsAudioChunks: [],
+    fishWsResolve: null
 };
 
 // 👁️ Eye Tracking - Global lookAt target (THREE.Object3D for VRM lookAt system)
@@ -153,6 +159,10 @@ let eyeTrackingTarget = null;
 
 // 🎭 Live2D Manager - Initialize globally
 let live2DManager = null;
+
+// 🐟 Fish Audio WebSocket Detection
+const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const FISH_WS_URL = 'ws://localhost:8765/fish-ws';
 
 // =============================================
 // DOM CACHE - Performance optimization (40% boost)
@@ -2105,13 +2115,140 @@ async function synthesizeChunk(text) {
 }
 
 // Synthesize audio using Fish Audio via Netlify Function
+/**
+ * Connect to local Fish Audio WebSocket server
+ * Only works when running on localhost
+ */
+async function connectToFishWebSocket() {
+    if (APP_STATE.fishWsConnected) {
+        console.log('✅ Fish WebSocket already connected');
+        return true;
+    }
+
+    return new Promise((resolve) => {
+        console.log('🐟 Connecting to local Fish Audio WebSocket server...');
+
+        const ws = new WebSocket(FISH_WS_URL);
+
+        ws.onopen = () => {
+            console.log('✅ Fish WebSocket connected');
+
+            // Initialize with API key
+            ws.send(JSON.stringify({
+                type: 'init',
+                apiKey: APP_STATE.settings.fishApiKey,
+                modelId: APP_STATE.settings.fishCustomModelId || APP_STATE.settings.fishVoiceId || null
+            }));
+        };
+
+        ws.onmessage = (event) => {
+            if (typeof event.data === 'string') {
+                const msg = JSON.parse(event.data);
+
+                if (msg.type === 'ready') {
+                    console.log('✅ Fish Audio WebSocket ready!');
+                    APP_STATE.fishWebSocket = ws;
+                    APP_STATE.fishWsConnected = true;
+                    resolve(true);
+                } else if (msg.type === 'error') {
+                    console.error('❌ Fish WebSocket error:', msg.message);
+                } else if (msg.type === 'fish-closed') {
+                    // Stream complete - resolve pending promise
+                    console.log('🏁 Fish stream closed - combining audio chunks...');
+                    if (APP_STATE.fishWsResolve) {
+                        const audioBlob = new Blob(APP_STATE.fishWsAudioChunks, { type: 'audio/mpeg' });
+                        console.log(`✅ Created audio blob: ${audioBlob.size} bytes from ${APP_STATE.fishWsAudioChunks.length} chunks`);
+                        APP_STATE.fishWsResolve({
+                            audioBlob: audioBlob,
+                            wordBoundaries: [],
+                            phonemes: null,
+                            text: ''
+                        });
+                        APP_STATE.fishWsResolve = null;
+                        APP_STATE.fishWsAudioChunks = [];
+                    } else {
+                        console.warn('⚠️ fish-closed received but no pending promise!');
+                    }
+                }
+            } else {
+                // Binary audio chunk
+                APP_STATE.fishWsAudioChunks.push(event.data);
+                console.log(`🎵 Fish WS audio chunk: ${event.data.size} bytes (${APP_STATE.fishWsAudioChunks.length} total)`);
+            }
+        };
+
+        ws.onerror = (error) => {
+            console.error('❌ Fish WebSocket error:', error);
+            APP_STATE.fishWsConnected = false;
+            resolve(false);
+        };
+
+        ws.onclose = () => {
+            console.log('🔌 Fish WebSocket disconnected');
+            APP_STATE.fishWebSocket = null;
+            APP_STATE.fishWsConnected = false;
+        };
+
+        // Timeout after 3 seconds
+        setTimeout(() => {
+            if (!APP_STATE.fishWsConnected) {
+                console.warn('⚠️ Fish WebSocket connection timeout - will use REST API');
+                resolve(false);
+            }
+        }, 3000);
+    });
+}
+
+/**
+ * Synthesize Fish Audio using WebSocket (local) or REST API (production)
+ */
 async function synthesizeFishAudioChunk(text) {
-    // Use Netlify function (works locally via netlify dev and in production)
+    // Use WebSocket if enabled AND connected
+    if (APP_STATE.settings.fishUseWebSocket && APP_STATE.fishWsConnected && APP_STATE.fishWebSocket) {
+        console.log('🚀 Using Fish Audio WebSocket (FAST MODE)');
+
+        return new Promise((resolve, reject) => {
+            try {
+                // Store resolve for when stream completes
+                APP_STATE.fishWsResolve = resolve;
+                APP_STATE.fishWsAudioChunks = [];
+
+                // Start new stream
+                APP_STATE.fishWebSocket.send(JSON.stringify({ type: 'start' }));
+
+                // Send text
+                setTimeout(() => {
+                    APP_STATE.fishWebSocket.send(JSON.stringify({ type: 'text', text: text }));
+
+                    // Stop stream
+                    setTimeout(() => {
+                        APP_STATE.fishWebSocket.send(JSON.stringify({ type: 'stop' }));
+                    }, 100);
+                }, 100);
+
+                // Timeout after 30 seconds
+                setTimeout(() => {
+                    if (APP_STATE.fishWsResolve) {
+                        reject(new Error('Fish WebSocket timeout'));
+                        APP_STATE.fishWsResolve = null;
+                    }
+                }, 30000);
+
+            } catch (error) {
+                console.error('❌ Fish WebSocket synthesis error:', error);
+                reject(error);
+            }
+        });
+    }
+
+    // Fall back to REST API (Netlify Function)
+    console.log('🌐 Using Fish Audio REST API (PRODUCTION/FALLBACK)');
+
     const url = '/.netlify/functions/fish-tts';
-    
+
     // Priority: Custom Model ID > Dropdown Selection
     const modelId = APP_STATE.settings.fishCustomModelId || APP_STATE.settings.fishVoiceId || null;
-    
+
     if (APP_STATE.settings.fishCustomModelId) {
         console.log(`🐟 Using CUSTOM model ID: ${modelId}`);
     } else if (APP_STATE.settings.fishVoiceId) {
@@ -2119,26 +2256,26 @@ async function synthesizeFishAudioChunk(text) {
     } else {
         console.log('🐟 No model ID specified (using default voice)');
     }
-    
+
     const requestBody = {
         text: text,
         reference_id: modelId,
-        
+
         // Speed optimizations
         latency: "balanced",    // Faster synthesis mode
         chunk_length: 100,      // Minimum = fastest
-        
+
         // Audio format
         format: "mp3",
         mp3_bitrate: 128,
-        
+
         // Prosody controls (map from existing TTS settings)
         prosody: {
             speed: 1 + (APP_STATE.settings.ttsRate / 100),
             volume: APP_STATE.settings.ttsVolume
         }
     };
-    
+
     try {
         const response = await fetch(url, {
             method: 'POST',
@@ -2148,21 +2285,21 @@ async function synthesizeFishAudioChunk(text) {
             },
             body: JSON.stringify(requestBody)
         });
-        
+
         if (!response.ok) {
             // Check if it's a 404 (Netlify function not available)
             if (response.status === 404) {
-                throw new Error('Fish Audio TTS only works on deployed Netlify site. Use Edge TTS for local development.');
+                throw new Error('Fish Audio TTS requires Netlify deployment or local WebSocket server.\n\nRun: node fish-websocket-server.js');
             }
             const errorText = await response.text();
             throw new Error(`Fish Audio API error (${response.status}): ${errorText}`);
         }
-        
+
         // Response is audio blob
         const audioBlob = await response.blob();
-        
-        console.log(`🐟 Fish Audio synthesized ${text.length} chars`);
-        
+
+        console.log(`🐟 Fish Audio synthesized ${text.length} chars via REST`);
+
         // Return in same format as Edge TTS for compatibility
         return {
             audioBlob: audioBlob,
@@ -2172,9 +2309,9 @@ async function synthesizeFishAudioChunk(text) {
         };
     } catch (error) {
         console.error('❌ Fish Audio synthesis error:', error);
-        // Show user-friendly message if running locally
-        if (error.message.includes('only works on deployed')) {
-            alert('⚠️ Fish Audio TTS requires Netlify deployment.\n\nSwitch to Edge TTS for local development, or run with "netlify dev".');
+        // Show user-friendly message
+        if (error.message.includes('requires Netlify')) {
+            alert('⚠️ Fish Audio TTS Error\n\n' + error.message + '\n\nOr switch to Edge TTS.');
         }
         throw error;
     }
@@ -2188,11 +2325,13 @@ async function speakText(text) {
         APP_STATE.speechQueue.push(text);
 
         // START PRE-BUFFERING: Synthesize next chunk in background
-        if (APP_STATE.speechQueue.length === 1 && !nextChunkReady) {
+        // DISABLE for Fish WebSocket (causes promise conflicts)
+        if (APP_STATE.speechQueue.length === 1 && !nextChunkReady &&
+            !(APP_STATE.settings.ttsProvider === 'fish' && APP_STATE.settings.fishUseWebSocket)) {
             console.log('🔄 Pre-buffering next chunk in background...');
             // Use same provider for pre-buffering
-            const synthesizeFunc = APP_STATE.settings.ttsProvider === 'fish' 
-                ? synthesizeFishAudioChunk 
+            const synthesizeFunc = APP_STATE.settings.ttsProvider === 'fish'
+                ? synthesizeFishAudioChunk
                 : synthesizeChunk;
             synthesizeFunc(text).then(result => {
                 nextChunkReady = result;
@@ -2235,8 +2374,10 @@ async function speakText(text) {
         }
 
         // Check if we have a pre-buffered chunk ready
+        // (Skip pre-buffer check for Fish WebSocket - not supported)
         let chunkData;
-        if (nextChunkReady && nextChunkReady.text === text) {
+        const usePreBuffer = APP_STATE.settings.ttsProvider !== 'fish' || !APP_STATE.settings.fishUseWebSocket;
+        if (usePreBuffer && nextChunkReady && nextChunkReady.text === text) {
             console.log('⚡ Using pre-buffered chunk (INSTANT playback!)');
             chunkData = nextChunkReady;
             nextChunkReady = null; // Clear it
@@ -2252,18 +2393,22 @@ async function speakText(text) {
 
         const { audioBlob, wordBoundaries, phonemes } = chunkData;
 
+        console.log(`🎵 Audio blob ready: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
+
         // Store data for lip-sync
         APP_STATE.wordBoundaries = wordBoundaries;
         APP_STATE.wordBoundaryStartTime = null;
         APP_STATE.currentPhonemes = phonemes;
 
         // START PRE-BUFFERING NEXT CHUNK (if there's one in queue)
-        if (APP_STATE.speechQueue.length > 0) {
+        // DISABLE for Fish WebSocket (causes promise conflicts)
+        if (APP_STATE.speechQueue.length > 0 &&
+            !(APP_STATE.settings.ttsProvider === 'fish' && APP_STATE.settings.fishUseWebSocket)) {
             const nextText = APP_STATE.speechQueue[0];
             console.log('🔄 Starting pre-buffer for next chunk...');
             // Use same provider for pre-buffering
-            const synthesizeFunc = APP_STATE.settings.ttsProvider === 'fish' 
-                ? synthesizeFishAudioChunk 
+            const synthesizeFunc = APP_STATE.settings.ttsProvider === 'fish'
+                ? synthesizeFishAudioChunk
                 : synthesizeChunk;
             synthesizeFunc(nextText).then(result => {
                 nextChunkReady = result;
@@ -4119,7 +4264,34 @@ function setupTTSControls() {
             }
         });
     }
-    
+
+    // Fish Audio WebSocket Toggle
+    const fishUseWebSocket = document.getElementById('fishUseWebSocket');
+    if (fishUseWebSocket) {
+        fishUseWebSocket.checked = APP_STATE.settings.fishUseWebSocket || false;
+        fishUseWebSocket.addEventListener('change', async (e) => {
+            const useWebSocket = e.target.checked;
+            saveSetting('fishUseWebSocket', useWebSocket);
+
+            if (useWebSocket) {
+                // Try to connect to WebSocket server
+                console.log('🐟 WebSocket enabled - attempting connection...');
+                const connected = await connectToFishWebSocket();
+                if (connected) {
+                    showStatus('✅ Fish Audio WebSocket connected - ultra-fast mode enabled!', 'success');
+                } else {
+                    showStatus('⚠️ WebSocket server not available - run: npm run fish-server', 'error');
+                    // Uncheck the box since connection failed
+                    fishUseWebSocket.checked = false;
+                    saveSetting('fishUseWebSocket', false);
+                }
+            } else {
+                console.log('🌐 WebSocket disabled - using REST API');
+                showStatus('✅ Fish Audio using REST API (Netlify Function)', 'success');
+            }
+        });
+    }
+
     // Test Fish TTS button
     const testFishTtsBtn = document.getElementById('testFishTtsBtn');
     if (testFishTtsBtn) {
@@ -5427,7 +5599,18 @@ async function init() {
 
     // Initialize TTS
     await initializeTTS();
-    
+
+    // Connect to Fish Audio WebSocket server if enabled
+    if (APP_STATE.settings.fishUseWebSocket && APP_STATE.settings.ttsProvider === 'fish' && APP_STATE.settings.fishApiKey) {
+        console.log('🐟 Fish WebSocket enabled - attempting to connect...');
+        const connected = await connectToFishWebSocket();
+        if (connected) {
+            console.log('✅ Fish Audio WebSocket ready for ultra-fast streaming!');
+        } else {
+            console.log('⚠️ Fish WebSocket not available - will use REST API fallback');
+        }
+    }
+
     // Load default VRM (non-blocking - don't wait for it)
     console.log('⏳ Attempting to load default VRM in background...');
     

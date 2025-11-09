@@ -552,7 +552,19 @@
                             <input type="text" id="fishCustomModelId" class="setting-input" placeholder="Enter model ID manually (e.g., 7f92f8afac8a4b4d...)">
                             <div class="range-hint">Override dropdown - paste any Fish Audio model ID</div>
                         </div>
-                        
+
+                        <div class="control-group">
+                            <label>
+                                <input type="checkbox" id="fishUseWebSocket">
+                                🚀 Use Local WebSocket Server (Faster)
+                            </label>
+                            <div class="range-hint">Enable for ultra-fast streaming (~200-400ms latency). Requires running: <code>npm run fish-server</code></div>
+                            <div class="tts-info" style="background: rgba(99, 102, 241, 0.1); border-left: 3px solid #6366f1; margin-top: 8px;">
+                                <p><strong>Unchecked (Default):</strong> Uses Netlify REST API (works everywhere, ~500-1400ms)</p>
+                                <p><strong>Checked:</strong> Uses local WebSocket server (faster, local development only)</p>
+                            </div>
+                        </div>
+
                         <div class="tts-info" style="background: rgba(255, 193, 7, 0.1); border-left: 3px solid #ffc107;">
                             <p>ℹ️ <strong>Note:</strong> Rate and Volume controls are shared with Edge TTS settings above</p>
                         </div>

@@ -1,0 +1,24 @@
+{
+  "name": "webwaifu",
+  "version": "2.0.0",
+  "description": "AI VTuber with real-time TTS and LLM integration",
+  "main": "fish-websocket-server.js",
+  "type": "module",
+  "scripts": {
+    "fish-server": "node fish-websocket-server.js",
+    "test-ws": "node websocket-test-server.js"
+  },
+  "dependencies": {
+    "fish-audio": "^0.0.3",
+    "ws": "^8.14.2"
+  },
+  "keywords": [
+    "websocket",
+    "fish-audio",
+    "tts",
+    "vtuber",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT"
+}

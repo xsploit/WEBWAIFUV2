@@ -3885,13 +3885,59 @@ function initializeUI() {
         // Trigger initial provider config display
         llmProvider.dispatchEvent(new Event('change'));
     }
-    
+
+    // Auto-fetch models when API keys are entered
+    const openaiApiKeyInput = document.getElementById('openaiApiKey');
+    if (openaiApiKeyInput) {
+        openaiApiKeyInput.addEventListener('blur', async (e) => {
+            const apiKey = e.target.value.trim();
+            if (apiKey && APP_STATE.settings.llmProvider === 'openai') {
+                console.log('🔑 OpenAI API key entered - fetching models...');
+                await fetchOpenAIModels(apiKey);
+            }
+        });
+    }
+
+    const geminiApiKeyInput = document.getElementById('geminiApiKey');
+    if (geminiApiKeyInput) {
+        geminiApiKeyInput.addEventListener('blur', async (e) => {
+            const apiKey = e.target.value.trim();
+            if (apiKey && APP_STATE.settings.llmProvider === 'gemini') {
+                console.log('🔑 Gemini API key entered - fetching models...');
+                await fetchGeminiModels(apiKey);
+            }
+        });
+    }
+
+    const openrouterApiKeyInput = document.getElementById('openrouterApiKey');
+    if (openrouterApiKeyInput) {
+        openrouterApiKeyInput.addEventListener('blur', async (e) => {
+            const apiKey = e.target.value.trim();
+            if (apiKey && APP_STATE.settings.llmProvider === 'openrouter') {
+                console.log('🔑 OpenRouter API key entered - fetching models...');
+                await fetchOpenRouterModels(apiKey);
+            }
+        });
+    }
+
+    // Auto-fetch Fish Audio voices when API key is entered
+    const fishApiKeyInput = document.getElementById('fishApiKey');
+    if (fishApiKeyInput) {
+        fishApiKeyInput.addEventListener('blur', async (e) => {
+            const apiKey = e.target.value.trim();
+            if (apiKey && APP_STATE.settings.ttsProvider === 'fish') {
+                console.log('🔑 Fish Audio API key entered - fetching voices...');
+                await fetchFishAudioModels(apiKey);
+            }
+        });
+    }
+
     // Test TTS button
     const testTtsBtn = document.getElementById('testTtsBtn');
     testTtsBtn.addEventListener('click', () => {
         speakText('Hello! This is a test of the Edge TTS voice synthesis. How do I sound?');
     });
-    
+
     // Background upload
     setupBackgroundControls();
 }

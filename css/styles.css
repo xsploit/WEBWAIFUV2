@@ -1734,20 +1734,6 @@ body.live2d-active::after {
     flex-direction: column;
 }
 
-.skip-btn {
-    background: rgba(3, 7, 18, 0.98);
-    color: var(--text-secondary);
-    border: 1px solid var(--border-color);
-}
-
-.skip-btn:hover {
-    background: radial-gradient(circle at top, rgba(17, 24, 39, 1), rgba(2, 6, 23, 1));
-    color: var(--text-primary);
-    border-color: var(--border-color-hover);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
-}
-
 .load-all-btn {
     background: var(--accent-gradient);
     color: #0b1020;
@@ -1762,8 +1748,7 @@ body.live2d-active::after {
     box-shadow: 0 8px 24px rgba(99, 102, 241, 0.5);
 }
 
-.load-all-btn:active,
-.skip-btn:active {
+.load-all-btn:active {
     transform: translateY(0);
 }
 

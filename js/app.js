@@ -326,7 +326,6 @@ function initDOMCache() {
     DOM.clearMemoriesBtn = document.getElementById('clearMemoriesBtn');
 
     // Splash Screen
-    DOM.skipSplash = document.getElementById('skipSplash');
     DOM.loadAllModels = document.getElementById('loadAllModels');
 
     // Reset Buttons
@@ -4179,14 +4178,6 @@ function setupLLMControls() {
     }
 
     // Splash Screen Button Handlers
-    const skipSplashBtn = document.getElementById('skipSplash');
-    if (skipSplashBtn) {
-        skipSplashBtn.addEventListener('click', () => {
-            console.log('⏭️ Skipping model loading - no camera reveal');
-            hideSplashScreen(false); // Skip camera reveal when user skips
-        });
-    }
-
     const loadAllModelsBtn = document.getElementById('loadAllModels');
     if (loadAllModelsBtn) {
         loadAllModelsBtn.addEventListener('click', async () => {

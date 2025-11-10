@@ -118,6 +118,29 @@
                 <div class="logo-text">WEBWAIFU</div>
                 <div class="logo-sub">AI VTUBER COMPANION ENVIRONMENT</div>
                 <div class="logo-version">BUILD v2.0 • LOCAL-FIRST • NEURAL-LINK READY</div>
+
+                <!-- CONTROL HINTS -->
+                <div class="splash-tip" style="background: rgba(99, 102, 241, 0.1); border-left: 3px solid #6366f1; padding: 8px; margin-top: 12px;">
+                    <strong>🎮 Control Hints:</strong><br>
+                    <span style="font-size: 0.85em;">
+                        • <strong>Left-click drag:</strong> Rotate camera<br>
+                        • <strong>Right-click drag:</strong> Move avatar position<br>
+                        • <strong>Scroll:</strong> Zoom camera<br>
+                        • <strong>Alt + Scroll:</strong> Zoom avatar scale<br>
+                        • <strong>SHIFT + Arrow Keys:</strong> Fine-tune settings (±0.01)
+                    </span>
+                </div>
+
+                <!-- IMPORTANT TIPS -->
+                <div class="splash-tip" style="background: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 8px; margin-top: 8px;">
+                    <strong>💡 Quick Tips:</strong><br>
+                    <span style="font-size: 0.85em;">
+                        • API keys auto-fetch models (click outside field after pasting)<br>
+                        • Memory system requires manual initialization (LLM Settings → Initialize Memory)<br>
+                        • Fish Audio WebSocket needs <code>npm run fish-server</code> for ultra-fast TTS<br>
+                        • Press ENTER in API key fields to load models instantly
+                    </span>
+                </div>
             </div>
 
             <!-- Model Status Grid (keep IDs for JS) -->
@@ -190,29 +213,6 @@
             <div class="splash-footer">
                 <div class="splash-tip">💾 Models are cached locally after first successful boot.</div>
                 <div class="splash-size">Total initial download ~300MB • Optimized for repeat sessions.</div>
-
-                <!-- CONTROL HINTS -->
-                <div class="splash-tip" style="background: rgba(99, 102, 241, 0.1); border-left: 3px solid #6366f1; padding: 10px; margin-top: 12px;">
-                    <strong>🎮 Control Hints:</strong><br>
-                    <span style="font-size: 0.85em;">
-                        • <strong>Left-click drag:</strong> Rotate camera<br>
-                        • <strong>Right-click drag:</strong> Move avatar position<br>
-                        • <strong>Scroll:</strong> Zoom camera<br>
-                        • <strong>Alt + Scroll:</strong> Zoom avatar scale<br>
-                        • <strong>SHIFT + Arrow Keys:</strong> Fine-tune settings (±0.01)
-                    </span>
-                </div>
-
-                <!-- IMPORTANT TIPS -->
-                <div class="splash-tip" style="background: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 10px; margin-top: 8px;">
-                    <strong>💡 Quick Tips:</strong><br>
-                    <span style="font-size: 0.85em;">
-                        • API keys auto-fetch models (click outside field after pasting)<br>
-                        • Memory system requires manual initialization (LLM Settings → Initialize Memory)<br>
-                        • Fish Audio WebSocket needs <code>npm run fish-server</code> for ultra-fast TTS<br>
-                        • Press ENTER in API key fields to load models instantly
-                    </span>
-                </div>
 
                 <div class="splash-tip splash-warning">
                     ⚠️ Using Ollama? Enable "Allow through network" and allow all origins (*) for localhost.

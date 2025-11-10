@@ -3886,49 +3886,61 @@ function initializeUI() {
         llmProvider.dispatchEvent(new Event('change'));
     }
 
-    // Auto-fetch models when API keys are entered
+    // Auto-fetch models when API keys are entered (blur or Enter key)
     const openaiApiKeyInput = document.getElementById('openaiApiKey');
     if (openaiApiKeyInput) {
-        openaiApiKeyInput.addEventListener('blur', async (e) => {
-            const apiKey = e.target.value.trim();
+        const fetchOpenAI = async (apiKey) => {
             if (apiKey && APP_STATE.settings.llmProvider === 'openai') {
                 console.log('🔑 OpenAI API key entered - fetching models...');
                 await fetchOpenAIModels(apiKey);
             }
+        };
+        openaiApiKeyInput.addEventListener('blur', (e) => fetchOpenAI(e.target.value.trim()));
+        openaiApiKeyInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') fetchOpenAI(e.target.value.trim());
         });
     }
 
     const geminiApiKeyInput = document.getElementById('geminiApiKey');
     if (geminiApiKeyInput) {
-        geminiApiKeyInput.addEventListener('blur', async (e) => {
-            const apiKey = e.target.value.trim();
+        const fetchGemini = async (apiKey) => {
             if (apiKey && APP_STATE.settings.llmProvider === 'gemini') {
                 console.log('🔑 Gemini API key entered - fetching models...');
                 await fetchGeminiModels(apiKey);
             }
+        };
+        geminiApiKeyInput.addEventListener('blur', (e) => fetchGemini(e.target.value.trim()));
+        geminiApiKeyInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') fetchGemini(e.target.value.trim());
         });
     }
 
     const openrouterApiKeyInput = document.getElementById('openrouterApiKey');
     if (openrouterApiKeyInput) {
-        openrouterApiKeyInput.addEventListener('blur', async (e) => {
-            const apiKey = e.target.value.trim();
+        const fetchOpenRouter = async (apiKey) => {
             if (apiKey && APP_STATE.settings.llmProvider === 'openrouter') {
                 console.log('🔑 OpenRouter API key entered - fetching models...');
                 await fetchOpenRouterModels(apiKey);
             }
+        };
+        openrouterApiKeyInput.addEventListener('blur', (e) => fetchOpenRouter(e.target.value.trim()));
+        openrouterApiKeyInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') fetchOpenRouter(e.target.value.trim());
         });
     }
 
     // Auto-fetch Fish Audio voices when API key is entered
     const fishApiKeyInput = document.getElementById('fishApiKey');
     if (fishApiKeyInput) {
-        fishApiKeyInput.addEventListener('blur', async (e) => {
-            const apiKey = e.target.value.trim();
+        const fetchFish = async (apiKey) => {
             if (apiKey && APP_STATE.settings.ttsProvider === 'fish') {
                 console.log('🔑 Fish Audio API key entered - fetching voices...');
                 await fetchFishAudioModels(apiKey);
             }
+        };
+        fishApiKeyInput.addEventListener('blur', (e) => fetchFish(e.target.value.trim()));
+        fishApiKeyInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') fetchFish(e.target.value.trim());
         });
     }
 
@@ -5744,6 +5756,10 @@ async function fetchOllamaModels() {
         }
     } catch (error) {
         console.error('❌ Failed to fetch Ollama models:', error);
+        showStatus(`❌ Ollama server not reachable at ${APP_STATE.settings.ollamaUrl || 'http://localhost:11434'}. Is it running?`, 'error');
+        // Show empty dropdown with helpful message
+        LLM_PROVIDERS.ollama.models = [];
+        updateLLMModelOptions();
     }
     return [];
 }

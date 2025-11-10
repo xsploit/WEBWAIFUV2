@@ -37,7 +37,7 @@
     </script>
 </head>
 <body>
-    <!-- Header -->
+    <!-- Header (restored minimal, keep sexy in splash instead) -->
     <header class="app-header">
         <div class="header-content">
             <div class="app-title">
@@ -51,6 +51,13 @@
             </div>
         </div>
     </header>
+
+    <!-- Hero HUD Layer -->
+    <section class="hero-hud">
+        <div class="hud-pill hud-pill-accent">ONLINE</div>
+        <div class="hud-pill">TTS • LLM • MEMORY STACK ARMED</div>
+        <div class="hud-pill hud-pill-soft">DRAG / SCROLL TO ORBIT YOUR WAIFU</div>
+    </section>
 
     <!-- Canvas Container for VRM Avatar (Three.js) -->
     <div id="canvas-container"></div>
@@ -72,14 +79,14 @@
         <div class="subtitle-text" id="subtitleText"></div>
     </div>
 
-    <!-- Chat Input -->
+    <!-- Chat Input / Sage Console -->
     <div class="floating-chat">
-        <div class="chat-input-container">
+        <div class="chat-input-container glassy sage-console">
             <div class="input-wrapper">
                 <button class="voice-btn" id="voiceBtn" title="Voice Input (Shift key)">
                     🎤
                 </button>
-                <input type="text" id="chatInput" placeholder="Type a message or hold Shift to speak..." autocomplete="off">
+                <input type="text" id="chatInput" placeholder="Ask her anything, or hold Shift to speak..." autocomplete="off">
                 <button class="send-btn" id="sendBtn" title="Send Message">
                     ➤
                 </button>
@@ -90,35 +97,44 @@
     <!-- Status Indicator -->
     <div class="status-indicator" id="statusIndicator">
         <span class="status-icon">⏳</span>
-        <span class="status-text">Ready</span>
+        <div class="status-meta">
+            <div class="status-text">Booting neural circuits</div>
+            <div class="status-sub">Awaiting your first prompt...</div>
+        </div>
     </div>
 
-    <!-- AI Splash Screen -->
+    <!-- AI Splash Screen - sexier, more cinematic, same hooks -->
     <div class="ai-splash-screen" id="aiSplash">
+        <div class="splash-orbit"></div>
+        <div class="splash-scanline"></div>
         <div class="splash-bg">
             <div class="splash-particles"></div>
         </div>
+
         <div class="splash-content">
+            <!-- Logo / Title Block -->
             <div class="splash-logo">
+                <div class="logo-kicker">BOOT SEQUENCE // WEBWAIFU V2</div>
                 <div class="logo-text">WEBWAIFU</div>
-                <div class="logo-sub">AI VTUBER SYSTEM</div>
-                <div class="logo-version">v2.0</div>
+                <div class="logo-sub">AI VTUBER COMPANION ENVIRONMENT</div>
+                <div class="logo-version">BUILD v2.0 • LOCAL-FIRST • NEURAL-LINK READY</div>
             </div>
 
+            <!-- Model Status Grid (keep IDs for JS) -->
             <div class="splash-models">
                 <div class="model-item" id="splashWhisper">
                     <div class="model-icon">🎤</div>
                     <div class="model-info">
-                        <div class="model-name">Whisper Tiny</div>
-                        <div class="model-desc">Speech Recognition</div>
+                        <div class="model-name">WHISPER TINY</div>
+                        <div class="model-desc">Realtime speech recognition pipeline</div>
                     </div>
                     <div class="model-status">
                         <div class="status-icon">⏳</div>
-                        <div class="status-text">Waiting...</div>
+                        <div class="status-text">Idle</div>
                     </div>
                     <div class="model-progress">
                         <div class="progress-bar-mini">
-                            <div class="progress-fill-mini" style="width: 0%"></div>
+                            <div class="progress-fill-mini" style="width:0%"></div>
                         </div>
                     </div>
                 </div>
@@ -126,16 +142,16 @@
                 <div class="model-item" id="splashEmbedding">
                     <div class="model-icon">🧠</div>
                     <div class="model-info">
-                        <div class="model-name">MiniLM-L6-v2</div>
-                        <div class="model-desc">Semantic Embeddings</div>
+                        <div class="model-name">MINILM-L6-V2</div>
+                        <div class="model-desc">Semantic memory + similarity search</div>
                     </div>
                     <div class="model-status">
                         <div class="status-icon">⏳</div>
-                        <div class="status-text">Waiting...</div>
+                        <div class="status-text">Idle</div>
                     </div>
                     <div class="model-progress">
                         <div class="progress-bar-mini">
-                            <div class="progress-fill-mini" style="width: 0%"></div>
+                            <div class="progress-fill-mini" style="width:0%"></div>
                         </div>
                     </div>
                 </div>
@@ -143,31 +159,63 @@
                 <div class="model-item" id="splashClassifier">
                     <div class="model-icon">🏷️</div>
                     <div class="model-info">
-                        <div class="model-name">DistilBERT</div>
-                        <div class="model-desc">Message Classification</div>
+                        <div class="model-name">DISTILBERT</div>
+                        <div class="model-desc">Intent / content routing brain</div>
                     </div>
                     <div class="model-status">
                         <div class="status-icon">⏳</div>
-                        <div class="status-text">Waiting...</div>
+                        <div class="status-text">Idle</div>
                     </div>
                     <div class="model-progress">
                         <div class="progress-bar-mini">
-                            <div class="progress-fill-mini" style="width: 0%"></div>
+                            <div class="progress-fill-mini" style="width:0%"></div>
                         </div>
                     </div>
                 </div>
             </div>
 
+            <!-- Primary actions -->
             <div class="splash-actions">
-                <button class="splash-btn skip-btn" id="skipSplash">Skip & Continue</button>
-                <button class="splash-btn load-all-btn" id="loadAllModels">Load All Models</button>
+                <button class="splash-btn skip-btn" id="skipSplash">
+                    ENTER WITHOUT PRELOAD
+                    <span class="splash-btn-sub">You can enable extras later in Settings</span>
+                </button>
+                <button class="splash-btn load-all-btn" id="loadAllModels">
+                    ARM ALL MODULES
+                    <span class="splash-btn-sub">Whisper + Embeddings + Classifier (~300MB cached)</span>
+                </button>
             </div>
 
+            <!-- Footer info -->
             <div class="splash-footer">
-                <div class="splash-tip">💡 Models are cached in browser after first load</div>
-                <div class="splash-size">Total Download: ~300MB</div>
-                <div class="splash-tip" style="color: #fbbf24; margin-top: 8px;">
-                    ⚠️ Using Ollama? Enable "Allow through network" in Ollama app + set origins to allow all (*)
+                <div class="splash-tip">💾 Models are cached locally after first successful boot.</div>
+                <div class="splash-size">Total initial download ~300MB • Optimized for repeat sessions.</div>
+
+                <!-- CONTROL HINTS -->
+                <div class="splash-tip" style="background: rgba(99, 102, 241, 0.1); border-left: 3px solid #6366f1; padding: 10px; margin-top: 12px;">
+                    <strong>🎮 Control Hints:</strong><br>
+                    <span style="font-size: 0.85em;">
+                        • <strong>Left-click drag:</strong> Rotate camera<br>
+                        • <strong>Right-click drag:</strong> Move avatar position<br>
+                        • <strong>Scroll:</strong> Zoom camera<br>
+                        • <strong>Alt + Scroll:</strong> Zoom avatar scale<br>
+                        • <strong>SHIFT + Arrow Keys:</strong> Fine-tune settings (±0.01)
+                    </span>
+                </div>
+
+                <!-- IMPORTANT TIPS -->
+                <div class="splash-tip" style="background: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 10px; margin-top: 8px;">
+                    <strong>💡 Quick Tips:</strong><br>
+                    <span style="font-size: 0.85em;">
+                        • API keys auto-fetch models (click outside field after pasting)<br>
+                        • Memory system requires manual initialization (LLM Settings → Initialize Memory)<br>
+                        • Fish Audio WebSocket needs <code>npm run fish-server</code> for ultra-fast TTS<br>
+                        • Press ENTER in API key fields to load models instantly
+                    </span>
+                </div>
+
+                <div class="splash-tip splash-warning">
+                    ⚠️ Using Ollama? Enable "Allow through network" and allow all origins (*) for localhost.
                 </div>
             </div>
         </div>

@@ -1795,29 +1795,36 @@ body.live2d-active::after {
 /* Responsive for Splash Screen */
 @media (max-width: 768px) {
     .splash-content {
-        width: 95%;
-        padding: 20px;
+        width: 100%;
+        max-width: 100%;
+        padding: 16px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
     }
 
     .logo-text {
-        font-size: 42px;
+        font-size: 36px;
+    }
+
+    .logo-kicker {
+        font-size: 9px;
     }
 
     .logo-sub {
-        font-size: 12px;
-        letter-spacing: 3px;
+        font-size: 11px;
+        letter-spacing: 2px;
     }
 
     .model-item {
-        padding: 16px;
-        grid-template-columns: 40px 1fr;
-        gap: 12px;
+        padding: 12px;
+        grid-template-columns: 36px 1fr;
+        gap: 10px;
     }
 
     .model-icon {
-        font-size: 24px;
-        width: 40px;
-        height: 40px;
+        font-size: 22px;
+        width: 36px;
+        height: 36px;
     }
 
     .model-status {
@@ -1833,6 +1840,50 @@ body.live2d-active::after {
 
     .splash-actions {
         flex-direction: column;
+    }
+
+    .load-all-btn {
+        padding: 14px 20px;
+        font-size: 11px;
+        min-height: 56px;
+        touch-action: manipulation;
+    }
+
+    .splash-tip {
+        font-size: 10px;
+    }
+
+    .splash-size {
+        font-size: 9px;
+    }
+
+    /* Mobile status indicator */
+    .status-indicator {
+        top: 74px;
+        right: 12px;
+        left: 12px;
+        width: auto;
+    }
+
+    /* Mobile speech bubble */
+    .speech-bubble-overlay {
+        top: 80px;
+        right: 12px;
+        left: 12px;
+        width: auto;
+        max-height: 50vh;
+    }
+
+    /* Touch-friendly controls */
+    .control-btn {
+        min-width: 44px;
+        min-height: 44px;
+        touch-action: manipulation;
+    }
+
+    /* Prevent zoom on input focus for iOS */
+    input, select, textarea {
+        font-size: 16px !important;
     }
 }
 
